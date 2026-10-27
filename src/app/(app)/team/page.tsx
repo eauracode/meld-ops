@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/server";
+import { mailConfigured } from "@/lib/mail";
 import { Team, type Member } from "./team";
 
 export const metadata = { title: "Team and access · Meld Ops" };
@@ -26,5 +27,5 @@ export default async function TeamPage() {
     status: confirmed.has(p.id) ? "active" : "invited",
   }));
 
-  return <Team members={members} merchants={merchants} selfId={profile.id} />;
+  return <Team members={members} merchants={merchants} selfId={profile.id} canEmail={mailConfigured()} />;
 }

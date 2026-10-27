@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import type { MailResult } from "@/lib/mail";
 import { Icon } from "@/components/icons";
 import { useFeedback } from "@/components/feedback";
 import { roleLabel, type Merchant, type Profile, type Role } from "@/lib/types";
@@ -16,7 +17,21 @@ function generatePassword() {
   return `Meld-${pick(4)}-${pick(4)}`;
 }
 
-function PasswordField({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+function PasswordField({
+  id,
+  value,
+  onChange,
+  canEmail,
+  emailIt,
+  onEmailIt,
+}: {
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  canEmail: boolean;
+  emailIt: boolean;
+  onEmailIt: (v: boolean) => void;
+}) {
   const [shown, setShown] = useState(true);
   return (
     <div className="field">
@@ -43,10 +58,28 @@ function PasswordField({ id, value, onChange }: { id: string; value: string; onC
         </button>
       </div>
       <span className="hint" id={`${id}-hint`}>
-        At least 8 characters. Share it privately; they choose their own password the first time they sign in.
+        At least 8 characters. They choose their own password the first time they sign in.
       </span>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 40, opacity: canEmail ? 1 : 0.55 }}>
+        <input type="checkbox" checked={canEmail && emailIt} disabled={!canEmail} onChange={(e) => onEmailIt(e.target.checked)} />
+        Email it to them, with the sign-in link
+      </label>
+      {!canEmail && <span className="hint">Email isn’t set up yet, so share the password with them yourself.</span>}
     </div>
   );
+}
+
+/** Toast after an account change that may also have emailed the password. */
+function mailNote(email: MailResult | null, to: string): ReactNode {
+  if (!email) return " Share the password with them privately.";
+  if (email.sent)
+    return (
+      <>
+        {" "}
+        Password emailed to <b>{to}</b>.
+      </>
+    );
+  return ` The email didn’t send (${email.reason}), so share the password yourself.`;
 }
 
 function AccessPicker({ merchants, value, onChange }: { merchants: Merchant[]; value: "all" | string[]; onChange: (v: "all" | string[]) => void }) {
@@ -79,7 +112,7 @@ function AccessPicker({ merchants, value, onChange }: { merchants: Merchant[]; v
   );
 }
 
-export function Team({ members, merchants, selfId }: { members: Member[]; merchants: Merchant[]; selfId: string }) {
+export function Team({ members, merchants, selfId, canEmail }: { members: Member[]; merchants: Merchant[]; selfId: string; canEmail: boolean }) {
   const router = useRouter();
   const { toast, confirm } = useFeedback();
   const inviteDlg = useRef<HTMLDialogElement>(null);
@@ -94,11 +127,13 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
     method: "password" as "password" | "email",
     // Filled when the dialog opens: generating during render would differ between server and browser.
     password: "",
+    emailIt: true,
   });
   const [invite, setInvite] = useState(blankInvite);
   const [inviteErr, setInviteErr] = useState("");
   const [pwFor, setPwFor] = useState<Member | null>(null);
   const [newPw, setNewPw] = useState("");
+  const [pwEmailIt, setPwEmailIt] = useState(true);
   const [pwErr, setPwErr] = useState("");
   const [editing, setEditing] = useState<Member | null>(null);
   const [editAccess, setEditAccess] = useState<"all" | string[]>([]);
@@ -107,15 +142,16 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
 
   const sendInvite = async () => {
     setBusy(true);
-    const { method, password, ...person } = invite;
-    const r = await inviteMember({ ...person, tempPassword: method === "password" ? password : undefined });
+    const { method, password, emailIt, ...person } = invite;
+    const usePw = method === "password";
+    const r = await inviteMember({ ...person, tempPassword: usePw ? password : undefined, emailPassword: usePw && canEmail && emailIt });
     setBusy(false);
     if (!r.ok) return setInviteErr(r.error);
     inviteDlg.current?.close();
     toast(
-      method === "password" ? (
+      usePw ? (
         <>
-          <b>{person.name.trim()}</b> can sign in now with their temporary password
+          <b>{person.name.trim()}</b> can sign in now.{mailNote(r.email, person.email.trim())}
         </>
       ) : (
         <>
@@ -130,13 +166,13 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
   const savePassword = async () => {
     if (!pwFor) return;
     setBusy(true);
-    const r = await setTempPassword(pwFor.id, newPw);
+    const r = await setTempPassword(pwFor.id, newPw, canEmail && pwEmailIt);
     setBusy(false);
     if (!r.ok) return setPwErr(r.error);
     pwDlg.current?.close();
     toast(
       <>
-        New temporary password set for <b>{pwFor.name || pwFor.email}</b>
+        New temporary password set for <b>{pwFor.name || pwFor.email}</b>.{mailNote(r.email, pwFor.email)}
       </>,
     );
     router.refresh();
@@ -386,7 +422,16 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
               Email them an invite link
             </label>
           </fieldset>
-          {invite.method === "password" && <PasswordField id="iPass" value={invite.password} onChange={(v) => setInvite({ ...invite, password: v })} />}
+          {invite.method === "password" && (
+            <PasswordField
+              id="iPass"
+              value={invite.password}
+              onChange={(v) => setInvite({ ...invite, password: v })}
+              canEmail={canEmail}
+              emailIt={invite.emailIt}
+              onEmailIt={(v) => setInvite({ ...invite, emailIt: v })}
+            />
+          )}
           {inviteErr && (
             <p className="err" role="alert">
               {inviteErr}
@@ -412,7 +457,7 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
           </p>
         </div>
         <div className="dlg-b">
-          <PasswordField id="pwNew" value={newPw} onChange={setNewPw} />
+          <PasswordField id="pwNew" value={newPw} onChange={setNewPw} canEmail={canEmail} emailIt={pwEmailIt} onEmailIt={setPwEmailIt} />
           {pwErr && (
             <p className="err" role="alert" style={{ marginTop: 8 }}>
               {pwErr}

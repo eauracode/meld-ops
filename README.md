@@ -41,6 +41,12 @@ If you change the markup, change both `markup()` and `meld_charged()`.
 
 Supabase’s free email service only sends a few emails an hour. For real invites, connect your own SMTP under **Authentication > Emails > SMTP settings**.
 
+### Adding staff
+
+Admins add people under **Team and access → Add person** with a temporary password. Tick **Email it to them** to send the password and sign-in link; they must choose their own password at first sign-in. **Set password** gives anyone a new temporary password.
+
+Emailing needs SMTP settings (`SMTP_*` in `.env.example`). The simplest free option is a Gmail account with an [App Password](https://myaccount.google.com/apppasswords) (2-Step Verification must be on); Gmail allows about 500 emails a day. Without SMTP settings the checkbox is off and admins share passwords themselves. The same SMTP details can go into Supabase (**Authentication > Emails > SMTP settings**) so its reset emails stop hitting the free-tier limit.
+
 ### 2. Groq
 
 Create a key at [console.groq.com/keys](https://console.groq.com/keys).

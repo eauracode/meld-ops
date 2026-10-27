@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { isValidPhone, normalisePhone, toNum } from "@/lib/calc";
 import { MERCHANT_COOKIE, actionSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/server";
+import { sendTempPassword, type MailResult } from "@/lib/mail";
 import type { Role } from "@/lib/types";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -104,6 +105,9 @@ export async function setRiderActive(id: string, active: boolean): Promise<Resul
 // ---------- team ----------
 const MIN_PASSWORD = 8;
 
+/** Result of an action that may also email the person: `email` says whether that worked. */
+export type MailedResult = { ok: true; email: MailResult | null } | { ok: false; error: string };
+
 /**
  * Adds a team member. With a temporary password the account works straight away and they must
  * choose their own password at first sign-in; without one, Supabase emails them an invite link.
@@ -115,7 +119,8 @@ export async function inviteMember(v: {
   role: Role;
   merchants: "all" | string[];
   tempPassword?: string;
-}): Promise<Result> {
+  emailPassword?: boolean;
+}): Promise<MailedResult> {
   await actionSession({ admin: true });
   const email = v.email.trim().toLowerCase();
   if (!v.name.trim()) return { ok: false, error: "Enter their full name." };
@@ -134,10 +139,12 @@ export async function inviteMember(v: {
   if (error) return { ok: false, error: /already/i.test(error.message) ? "Someone on the team already uses this email." : error.message };
   if (!all && data.user) {
     const { error: aErr } = await admin.from("merchant_access").insert((v.merchants as string[]).map((merchant_id) => ({ user_id: data.user!.id, merchant_id })));
-    if (aErr) return fail(aErr);
+    if (aErr) return { ok: false, error: aErr.message };
   }
   revalidatePath("/team");
-  return { ok: true };
+  // The account exists either way; a failed email only means the admin shares the password.
+  const mail = password && v.emailPassword ? await sendTempPassword({ to: email, name: meta.name, password, kind: "welcome" }) : null;
+  return { ok: true, email: mail };
 }
 
 export async function resendInvite(email: string): Promise<Result> {
@@ -149,17 +156,21 @@ export async function resendInvite(email: string): Promise<Result> {
 }
 
 /** Gives someone a new temporary password; they must replace it at their next sign-in. */
-export async function setTempPassword(userId: string, password: string): Promise<Result> {
+export async function setTempPassword(userId: string, password: string, emailPassword = false): Promise<MailedResult> {
   const s = await actionSession({ admin: true });
   if (userId === s.profile.id) return { ok: false, error: "Change your own password from the sign-in page with “Forgot password?”." };
   if (password.trim().length < MIN_PASSWORD) return { ok: false, error: `Use at least ${MIN_PASSWORD} characters.` };
-  const { error } = await createAdminClient().auth.admin.updateUserById(userId, {
+  const { data, error } = await createAdminClient().auth.admin.updateUserById(userId, {
     password: password.trim(),
     email_confirm: true,
     user_metadata: { must_change_password: true },
   });
+  if (error) return { ok: false, error: error.message };
   revalidatePath("/team");
-  return fail(error);
+  const to = data.user?.email;
+  const name = String(data.user?.user_metadata?.name ?? "");
+  const mail = emailPassword && to ? await sendTempPassword({ to, name, password: password.trim(), kind: "reset" }) : null;
+  return { ok: true, email: mail };
 }
 
 async function adminCount(s: Awaited<ReturnType<typeof actionSession>>) {
