@@ -1,0 +1,76 @@
+# Meld Ops
+
+Meld’s operations app. It turns WhatsApp order messages into orders (Groq `gpt-oss-120b`), builds the delivery report, and works out each merchant’s daily remittance.
+
+Built with Next.js 16 on Vercel, Supabase (Postgres and sign-in, free plan) and plain CSS ported from the approved prototype.
+
+## Business rules
+
+All of these live in `src/lib/calc.ts` and are covered by tests (`npm test`).
+
+| Rule | Where |
+| --- | --- |
+| Markup on the rider fee: under ₦3,000 adds ₦2,000; ₦3,000 to ₦4,999 adds ₦1,500; ₦5,000 and over adds ₦1,000 | `markup()`, mirrored in SQL as `meld_charged()` for `orders.amount_charged` |
+| Revenue = amount charged − rider fee | `reportTotals()` |
+| Expected remittance = money received − delivery fees − waybill charges − failed fees − other deductions | `remitSummary()` |
+| Failed or returned lines are charged 50% of the amount charged | `FAILED_FEE_SHARE` |
+| Line type: failed/returned status → Failed; “waybill” in the customer name → Waybill | `autoLineType()` |
+| Delivered orders take their quantity out of the product’s stock | SQL trigger `orders_stock` |
+
+If you change the markup, change both `markup()` and `meld_charged()`.
+
+## First-time setup
+
+### 1. Supabase (free)
+
+1. Create a project at [supabase.com](https://supabase.com). Choose a region close to Lagos (for example Europe West, London).
+2. Open **SQL Editor**, paste all of `supabase/schema.sql` and run it. Optionally run `supabase/seed.sql` for a sample merchant and rate card.
+3. Under **Authentication > Sign In / Providers**, turn off **Allow new users to sign up**. Staff join by invite only.
+4. Under **Authentication > Email Templates**, change the link in **Invite user** and **Reset password** so it opens the app:
+   - Invite: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite`
+   - Reset password: `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery`
+5. Under **Authentication > URL Configuration**, set **Site URL** to the app’s address (`http://localhost:3000` while testing; your Vercel URL later).
+6. Create the first admin. Under **Authentication > Users > Add user**, add your email and a password with **Auto confirm** ticked. Then in the SQL Editor run:
+
+   ```sql
+   update public.profiles set role = 'admin', all_merchants = true, name = 'Your name', title = 'Admin'
+   where email = 'you@example.com';
+   ```
+
+7. Copy the keys from **Project Settings > API Keys**.
+
+Supabase’s free email service only sends a few emails an hour. For real invites, connect your own SMTP under **Authentication > Emails > SMTP settings**.
+
+### 2. Groq
+
+Create a key at [console.groq.com/keys](https://console.groq.com/keys).
+
+### 3. Run locally
+
+```bash
+cp .env.example .env.local   # then fill in the values
+npm install
+npm run dev                  # http://localhost:3000
+npm test                     # business-rule tests
+```
+
+## Deploying to Vercel
+
+1. Push this folder to a GitHub repository.
+2. In Vercel: **Add New > Project**, then import the repository. The framework is detected as Next.js.
+3. Add the environment variables from `.env.example`. Set `NEXT_PUBLIC_SITE_URL` to the Vercel URL, for example `https://meld-ops.vercel.app`.
+4. Deploy, then set Supabase’s **Site URL** (step 5 above) to the same address.
+
+## Where things are
+
+```text
+src/lib/calc.ts            business rules (markup, remittance, report totals, matching)
+src/lib/extract.ts         Groq extraction prompt and parsing (server only)
+src/lib/session.ts         signed-in user, role, merchants they can see, selected merchant
+src/app/actions/*.ts       server actions (every one checks the session; admin-only ones check the role)
+src/app/(app)/*            screens: new, orders, report, remittance, merchants, riders, team
+src/proxy.ts               refreshes the session; sends signed-out visitors to /signin
+supabase/schema.sql        tables, markup function, stock trigger, row-level security
+```
+
+Access is enforced in the database with row-level security: ops staff only read and write orders for the merchants they’re given, and only admins touch remittances, merchant settings and the team.
