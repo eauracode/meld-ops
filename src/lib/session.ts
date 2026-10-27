@@ -20,6 +20,10 @@ export const getSession = cache(async (): Promise<Session> => {
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub;
   if (!userId) redirect("/signin");
+  // Someone signed in with a temporary password set by an admin must choose their own first.
+  if ((claims.claims.user_metadata as { must_change_password?: boolean } | undefined)?.must_change_password) {
+    redirect("/auth/set-password");
+  }
 
   const [{ data: profile }, { data: merchants }] = await Promise.all([
     supabase.from("profiles").select("id,name,email,title,role,all_merchants").eq("id", userId).single(),

@@ -12,7 +12,10 @@ export default async function SetPasswordPage() {
   return (
     <div className="signin">
       <SigninArt />
-      <SetPasswordForm email={String(data.claims.email ?? "")} />
+      <SetPasswordForm
+        email={String(data.claims.email ?? "")}
+        temporary={Boolean((data.claims.user_metadata as { must_change_password?: boolean } | undefined)?.must_change_password)}
+      />
     </div>
   );
 }

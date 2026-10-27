@@ -102,7 +102,20 @@ export async function setRiderActive(id: string, active: boolean): Promise<Resul
 }
 
 // ---------- team ----------
-export async function inviteMember(v: { name: string; email: string; title: string; role: Role; merchants: "all" | string[] }): Promise<Result> {
+const MIN_PASSWORD = 8;
+
+/**
+ * Adds a team member. With a temporary password the account works straight away and they must
+ * choose their own password at first sign-in; without one, Supabase emails them an invite link.
+ */
+export async function inviteMember(v: {
+  name: string;
+  email: string;
+  title: string;
+  role: Role;
+  merchants: "all" | string[];
+  tempPassword?: string;
+}): Promise<Result> {
   await actionSession({ admin: true });
   const email = v.email.trim().toLowerCase();
   if (!v.name.trim()) return { ok: false, error: "Enter their full name." };
@@ -110,12 +123,14 @@ export async function inviteMember(v: { name: string; email: string; title: stri
   const role: Role = v.role === "admin" ? "admin" : "ops";
   const all = role === "admin" || v.merchants === "all";
   if (!all && !v.merchants.length) return { ok: false, error: "Give them at least one merchant." };
+  const password = v.tempPassword?.trim();
+  if (password !== undefined && password.length < MIN_PASSWORD) return { ok: false, error: `The temporary password needs at least ${MIN_PASSWORD} characters.` };
 
   const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-    data: { name: v.name.trim(), title: v.title, role, all_merchants: all },
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/set-password`,
-  });
+  const meta = { name: v.name.trim(), title: v.title, role, all_merchants: all };
+  const { data, error } = password
+    ? await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { ...meta, must_change_password: true } })
+    : await admin.auth.admin.inviteUserByEmail(email, { data: meta, redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/set-password` });
   if (error) return { ok: false, error: /already/i.test(error.message) ? "Someone on the team already uses this email." : error.message };
   if (!all && data.user) {
     const { error: aErr } = await admin.from("merchant_access").insert((v.merchants as string[]).map((merchant_id) => ({ user_id: data.user!.id, merchant_id })));
@@ -130,6 +145,20 @@ export async function resendInvite(email: string): Promise<Result> {
   const { error } = await createAdminClient().auth.admin.inviteUserByEmail(email, {
     redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/set-password`,
   });
+  return fail(error);
+}
+
+/** Gives someone a new temporary password; they must replace it at their next sign-in. */
+export async function setTempPassword(userId: string, password: string): Promise<Result> {
+  const s = await actionSession({ admin: true });
+  if (userId === s.profile.id) return { ok: false, error: "Change your own password from the sign-in page with “Forgot password?”." };
+  if (password.trim().length < MIN_PASSWORD) return { ok: false, error: `Use at least ${MIN_PASSWORD} characters.` };
+  const { error } = await createAdminClient().auth.admin.updateUserById(userId, {
+    password: password.trim(),
+    email_confirm: true,
+    user_metadata: { must_change_password: true },
+  });
+  revalidatePath("/team");
   return fail(error);
 }
 

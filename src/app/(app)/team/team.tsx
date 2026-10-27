@@ -5,9 +5,49 @@ import { useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useFeedback } from "@/components/feedback";
 import { roleLabel, type Merchant, type Profile, type Role } from "@/lib/types";
-import { inviteMember, removeMember, resendInvite, setMemberAccess, setMemberRole } from "@/app/actions/settings";
+import { inviteMember, removeMember, resendInvite, setMemberAccess, setMemberRole, setTempPassword } from "@/app/actions/settings";
 
 export type Member = Profile & { merchants: "all" | string[]; status: "active" | "invited" };
+
+/** Easy to read out or type: no 0/O or 1/l/I. */
+function generatePassword() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  const pick = (n: number) => Array.from(crypto.getRandomValues(new Uint32Array(n)), (x) => chars[x % chars.length]).join("");
+  return `Meld-${pick(4)}-${pick(4)}`;
+}
+
+function PasswordField({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  const [shown, setShown] = useState(true);
+  return (
+    <div className="field">
+      <div className="lblrow">
+        <label htmlFor={id} className="lbl">
+          Temporary password
+        </label>
+        <button className="btn link sm" type="button" onClick={() => onChange(generatePassword())}>
+          Generate
+        </button>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          className="input"
+          id={id}
+          type={shown ? "text" : "password"}
+          autoComplete="new-password"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          aria-describedby={`${id}-hint`}
+        />
+        <button className="btn sm" type="button" onClick={() => setShown((s) => !s)} aria-pressed={!shown} style={{ minHeight: 44 }}>
+          {shown ? "Hide" : "Show"}
+        </button>
+      </div>
+      <span className="hint" id={`${id}-hint`}>
+        At least 8 characters. Share it privately; they choose their own password the first time they sign in.
+      </span>
+    </div>
+  );
+}
 
 function AccessPicker({ merchants, value, onChange }: { merchants: Merchant[]; value: "all" | string[]; onChange: (v: "all" | string[]) => void }) {
   const all = value === "all";
@@ -44,8 +84,22 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
   const { toast, confirm } = useFeedback();
   const inviteDlg = useRef<HTMLDialogElement>(null);
   const accessDlg = useRef<HTMLDialogElement>(null);
-  const [invite, setInvite] = useState({ name: "", email: "", title: "Dispatcher", role: "ops" as Role, merchants: [] as "all" | string[] });
+  const pwDlg = useRef<HTMLDialogElement>(null);
+  const blankInvite = () => ({
+    name: "",
+    email: "",
+    title: "Dispatcher",
+    role: "ops" as Role,
+    merchants: [] as "all" | string[],
+    method: "password" as "password" | "email",
+    // Filled when the dialog opens: generating during render would differ between server and browser.
+    password: "",
+  });
+  const [invite, setInvite] = useState(blankInvite);
   const [inviteErr, setInviteErr] = useState("");
+  const [pwFor, setPwFor] = useState<Member | null>(null);
+  const [newPw, setNewPw] = useState("");
+  const [pwErr, setPwErr] = useState("");
   const [editing, setEditing] = useState<Member | null>(null);
   const [editAccess, setEditAccess] = useState<"all" | string[]>([]);
   const [accessErr, setAccessErr] = useState("");
@@ -53,16 +107,38 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
 
   const sendInvite = async () => {
     setBusy(true);
-    const r = await inviteMember(invite);
+    const { method, password, ...person } = invite;
+    const r = await inviteMember({ ...person, tempPassword: method === "password" ? password : undefined });
     setBusy(false);
     if (!r.ok) return setInviteErr(r.error);
     inviteDlg.current?.close();
     toast(
+      method === "password" ? (
+        <>
+          <b>{person.name.trim()}</b> can sign in now with their temporary password
+        </>
+      ) : (
+        <>
+          Invite sent to <b>{person.email.trim()}</b>
+        </>
+      ),
+    );
+    setInvite(blankInvite());
+    router.refresh();
+  };
+
+  const savePassword = async () => {
+    if (!pwFor) return;
+    setBusy(true);
+    const r = await setTempPassword(pwFor.id, newPw);
+    setBusy(false);
+    if (!r.ok) return setPwErr(r.error);
+    pwDlg.current?.close();
+    toast(
       <>
-        Invite sent to <b>{invite.email.trim()}</b>
+        New temporary password set for <b>{pwFor.name || pwFor.email}</b>
       </>,
     );
-    setInvite({ name: "", email: "", title: "Dispatcher", role: "ops", merchants: [] });
     router.refresh();
   };
 
@@ -125,10 +201,11 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
           type="button"
           onClick={() => {
             setInviteErr("");
+            setInvite((i) => (i.password ? i : { ...i, password: generatePassword() }));
             inviteDlg.current?.showModal();
           }}
         >
-          Invite person
+          Add person
         </button>
       </div>
       <div className="grid2" style={{ marginBottom: 20 }}>
@@ -214,6 +291,20 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
                             Edit access
                           </button>
                         )}
+                        {!self && (
+                          <button
+                            className="btn sm"
+                            type="button"
+                            onClick={() => {
+                              setPwFor(m);
+                              setNewPw(generatePassword());
+                              setPwErr("");
+                              pwDlg.current?.showModal();
+                            }}
+                          >
+                            Set password
+                          </button>
+                        )}
                         {m.status === "invited" && (
                           <button
                             className="btn sm link"
@@ -243,9 +334,11 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
 
       <dialog ref={inviteDlg} aria-labelledby="inv-title">
         <div className="dlg-h">
-          <h2 id="inv-title">Invite person</h2>
+          <h2 id="inv-title">Add person</h2>
           <p className="small muted" style={{ marginTop: 4 }}>
-            They get an email to set a password.
+            {invite.method === "password"
+              ? "Their account works straight away with the temporary password you give them."
+              : "They get an email with a link to set their password."}
           </p>
         </div>
         <div className="dlg-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -280,6 +373,20 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
             </div>
           </div>
           {invite.role === "ops" && <AccessPicker merchants={merchants} value={invite.merchants} onChange={(v) => setInvite({ ...invite, merchants: v })} />}
+          <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="lbl" style={{ marginBottom: 6 }}>
+              How they sign in
+            </legend>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 40 }}>
+              <input type="radio" name="iMethod" checked={invite.method === "password"} onChange={() => setInvite({ ...invite, method: "password" })} />
+              Set a temporary password
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 40 }}>
+              <input type="radio" name="iMethod" checked={invite.method === "email"} onChange={() => setInvite({ ...invite, method: "email" })} />
+              Email them an invite link
+            </label>
+          </fieldset>
+          {invite.method === "password" && <PasswordField id="iPass" value={invite.password} onChange={(v) => setInvite({ ...invite, password: v })} />}
           {inviteErr && (
             <p className="err" role="alert">
               {inviteErr}
@@ -292,7 +399,33 @@ export function Team({ members, merchants, selfId }: { members: Member[]; mercha
           </button>
           <button className="btn primary" type="button" onClick={sendInvite} disabled={busy}>
             {busy && <span className="spin" aria-hidden="true" />}
-            Send invite
+            {invite.method === "password" ? "Add person" : "Send invite"}
+          </button>
+        </div>
+      </dialog>
+
+      <dialog ref={pwDlg} aria-labelledby="pw-title">
+        <div className="dlg-h">
+          <h2 id="pw-title">Set a new password</h2>
+          <p className="small muted" style={{ marginTop: 4 }}>
+            For {pwFor?.name || pwFor?.email}. Their old password stops working, and they choose their own after signing in.
+          </p>
+        </div>
+        <div className="dlg-b">
+          <PasswordField id="pwNew" value={newPw} onChange={setNewPw} />
+          {pwErr && (
+            <p className="err" role="alert" style={{ marginTop: 8 }}>
+              {pwErr}
+            </p>
+          )}
+        </div>
+        <div className="dlg-f">
+          <button className="btn" type="button" onClick={() => pwDlg.current?.close()}>
+            Cancel
+          </button>
+          <button className="btn primary" type="button" onClick={savePassword} disabled={busy}>
+            {busy && <span className="spin" aria-hidden="true" />}
+            Set password
           </button>
         </div>
       </dialog>

@@ -4,14 +4,16 @@ import { useActionState } from "react";
 import { setPassword, type FormState } from "@/app/signin/actions";
 import { Icon } from "@/components/icons";
 
-export function SetPasswordForm({ email }: { email: string }) {
+export function SetPasswordForm({ email, temporary }: { email: string; temporary: boolean }) {
   const [state, action, pending] = useActionState<FormState, FormData>(setPassword, {});
   return (
     <form action={action} noValidate>
       <div>
-        <h2 style={{ fontSize: "1.6rem" }}>Set your password</h2>
+        <h2 style={{ fontSize: "1.6rem" }}>{temporary ? "Choose your own password" : "Set your password"}</h2>
         <p className="muted" style={{ marginTop: 4 }}>
-          For {email}. Use at least 8 characters.
+          {temporary
+            ? `You signed in with a temporary password for ${email}. Replace it with one only you know, at least 8 characters.`
+            : `For ${email}. Use at least 8 characters.`}
         </p>
       </div>
       {state.error && (

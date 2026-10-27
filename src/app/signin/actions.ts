@@ -37,7 +37,13 @@ export async function setPassword(_prev: FormState, form: FormData): Promise<For
   if (password.length < 8) return { error: "Use at least 8 characters." };
   if (password !== String(form.get("confirm") ?? "")) return { error: "The two passwords don’t match." };
   const supabase = await createClient();
-  const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: "That link has expired. Ask your admin to resend your invite, or request a new reset link." };
+  const { error } = await supabase.auth.updateUser({ password, data: { must_change_password: false } });
+  if (error) {
+    return /different from the old|same/i.test(error.message)
+      ? { error: "Choose a password different from the temporary one." }
+      : { error: "That link has expired. Ask your admin to resend your invite, or request a new reset link." };
+  }
+  // The signed-in token still says "must change password" until it is reissued.
+  await supabase.auth.refreshSession();
   redirect("/new");
 }
