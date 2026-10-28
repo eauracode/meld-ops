@@ -96,7 +96,9 @@ create table public.orders (
   qty integer not null default 1 check (qty >= 0),
   order_value integer not null default 0 check (order_value >= 0),
   rider_fee integer not null default 0 check (rider_fee >= 0),
-  amount_charged integer generated always as (public.meld_charged(rider_fee)) stored,
+  -- Manual charge (discount or special price); null means rider fee + markup.
+  charge_override integer check (charge_override >= 0),
+  amount_charged integer generated always as (coalesce(charge_override, public.meld_charged(rider_fee))) stored,
   payment text not null default 'Cash on delivery' check (payment in ('Cash on delivery', 'Already paid')),
   notes text not null default '',
   rider_id uuid references public.riders (id) on delete set null,

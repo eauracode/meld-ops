@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
-import { dmy, lagosToday, naira, reportTotals } from "@/lib/calc";
+import { charged, dmy, lagosToday, naira, reportTotals } from "@/lib/calc";
 import { NoMerchant } from "@/components/no-merchant";
 import { fetchAll } from "@/lib/fetch-all";
 import { ReportFilters } from "./report-filters";
@@ -196,9 +196,15 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
                     </td>
                     <td data-l="Charged" className="num">
                       {naira(o.amount_charged)}
-                      <span className="tag" title={`Rider fee + ${naira(o.amount_charged - o.rider_fee)} markup`}>
-                        auto
-                      </span>
+                      {o.amount_charged === charged(o.rider_fee) ? (
+                        <span className="tag" title={`Rider fee + ${naira(o.amount_charged - o.rider_fee)} markup`}>
+                          auto
+                        </span>
+                      ) : (
+                        <span className="tag" title={`Changed by hand; the markup rule would charge ${naira(charged(o.rider_fee))}`}>
+                          edited
+                        </span>
+                      )}
                     </td>
                     <td data-l="Revenue" className="num">
                       {naira(o.amount_charged - o.rider_fee)}

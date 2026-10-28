@@ -1,8 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { LINE_TYPES, autoLineType, stockRemaining, toNum, type LineType } from "@/lib/calc";
-import { actionSession } from "@/lib/session";
+import { LINE_TYPES, autoLineType, charged, stockRemaining, toNum, type LineType } from "@/lib/calc";
+import { actionSession, type Session } from "@/lib/session";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -90,6 +90,32 @@ export async function generateRemittance(merchantId: string, date: string): Prom
   return { ok: true };
 }
 
+/**
+ * An amount charged edited on a remittance line becomes that order's charge, so the dashboard and
+ * delivery report agree with the remittance. Matching the markup again clears the manual charge.
+ * Best effort: before migration 003 there is no charge_override column and nothing changes.
+ */
+async function syncOrderCharges(supabase: Session["supabase"], rows: { order_id: number | null; amount_charged: number }[]) {
+  const linked = rows.filter((r) => r.order_id !== null);
+  if (!linked.length) return;
+  const { data: orders } = await supabase
+    .from("orders")
+    .select("id,rider_fee,amount_charged")
+    .in("id", linked.map((r) => r.order_id!));
+  for (const o of orders ?? []) {
+    const want = linked.find((r) => r.order_id === o.id)!.amount_charged;
+    if (want === o.amount_charged) continue;
+    const { error } = await supabase
+      .from("orders")
+      .update({ charge_override: want === charged(o.rider_fee) ? null : want })
+      .eq("id", o.id);
+    if (error) return; // column not there yet
+  }
+  revalidatePath("/dashboard");
+  revalidatePath("/report");
+  revalidatePath("/orders");
+}
+
 /** Saves the edited lines and other deductions. Called as the admin types (debounced). */
 export async function saveRemittance(id: string, lines: LineInput[], other: number | string, otherNote: string): Promise<Result> {
   const s = await actionSession({ admin: true });
@@ -110,6 +136,7 @@ export async function saveRemittance(id: string, lines: LineInput[], other: numb
     const { error } = await s.supabase.from("remittance_lines").insert(rows);
     if (error) return { ok: false, error: error.message };
   }
+  await syncOrderCharges(s.supabase, rows);
   return { ok: true };
 }
 

@@ -20,6 +20,8 @@ All of these live in `src/lib/calc.ts` and are covered by tests (`npm test`).
 
 If you change the markup, change both `markup()` and `meld_charged()`.
 
+An order’s amount charged can be changed by hand (for a discount or special price) by editing **Amount charged** on its remittance line. That sets `orders.charge_override`, which replaces the markup for that order everywhere (dashboard, delivery report). The report tags those charges “edited”.
+
 ## First-time setup
 
 ### 1. Supabase (free)
