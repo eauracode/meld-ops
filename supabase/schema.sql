@@ -140,6 +140,8 @@ create table public.remittances (
   sent_at timestamptz,
   paid_at timestamptz,
   paid_by uuid references public.profiles (id) on delete set null,
+  -- Merchant's stock when marked sent/paid: [{"product": "...", "stock": 42}]
+  stock_snapshot jsonb,
   unique (merchant_id, remit_date)
 );
 

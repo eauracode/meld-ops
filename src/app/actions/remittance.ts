@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { LINE_TYPES, autoLineType, toNum, type LineType } from "@/lib/calc";
+import { LINE_TYPES, autoLineType, stockRemaining, toNum, type LineType } from "@/lib/calc";
 import { actionSession } from "@/lib/session";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -115,14 +115,30 @@ export async function saveRemittance(id: string, lines: LineInput[], other: numb
 
 export async function setRemittanceStatus(id: string, status: "sent" | "paid"): Promise<Result> {
   const s = await actionSession({ admin: true });
-  const { data: r } = await s.supabase.from("remittances").select("status").eq("id", id).single();
+  // select("*") so this still works before migration 002 adds stock_snapshot.
+  const { data: r } = await s.supabase.from("remittances").select("*").eq("id", id).single();
   if (!r) return { ok: false, error: "Remittance not found." };
   if (r.status === "paid") return { ok: false, error: "Already paid." };
   if (status === "sent" && r.status !== "draft") return { ok: true };
 
   const now = new Date().toISOString();
-  const patch = status === "paid" ? { status, paid_at: now, paid_by: s.profile.id } : { status, sent_at: now };
-  const { error } = await s.supabase.from("remittances").update(patch).eq("id", id);
+  const patch: Record<string, unknown> = status === "paid" ? { status, paid_at: now, paid_by: s.profile.id } : { status, sent_at: now };
+
+  // Freeze the stock the merchant holds as the report leaves our hands (first of sent/paid).
+  if (!r.stock_snapshot) {
+    const [{ data: products }, { data: lines }] = await Promise.all([
+      s.supabase.from("products").select("name,stock").eq("merchant_id", r.merchant_id),
+      s.supabase.from("remittance_lines").select("product").eq("remittance_id", id),
+    ]);
+    patch.stock_snapshot = stockRemaining(products ?? [], (lines ?? []).map((l) => l.product));
+  }
+
+  let { error } = await s.supabase.from("remittances").update(patch).eq("id", id);
+  if (error && "stock_snapshot" in patch && /stock_snapshot/.test(error.message)) {
+    // Column not added yet (migration 002): save the status without the snapshot.
+    delete patch.stock_snapshot;
+    ({ error } = await s.supabase.from("remittances").update(patch).eq("id", id));
+  }
   revalidatePath("/remittance");
   return error ? { ok: false, error: error.message } : { ok: true };
 }

@@ -1,10 +1,10 @@
-import { dmy, type RemitLine, type RemitSummary } from "@/lib/calc";
+import { dmy, type RemitLine, type RemitSummary, type StockRow } from "@/lib/calc";
 
 // jsPDF's built-in fonts have no ₦ glyph, so amounts print as "NGN 12,000".
 const N = (v: number) => "NGN " + Math.round(v).toLocaleString("en-NG");
 
 /** Builds the remittance PDF in the browser and downloads it. jsPDF loads only when needed. */
-export async function buildRemitPdf(merchantName: string, date: string, s: RemitSummary, note: string, lines: RemitLine[]) {
+export async function buildRemitPdf(merchantName: string, date: string, s: RemitSummary, note: string, lines: RemitLine[], stock: StockRow[]) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "pt", format: "a4" });
 
@@ -68,6 +68,22 @@ export async function buildRemitPdf(merchantName: string, date: string, s: Remit
   y += 8;
   doc.setFontSize(14);
   row("Expected remittance", N(s.expected), true);
+
+  if (stock.length) {
+    y += 12;
+    doc.setFontSize(12);
+    doc.setFont("times", "bold");
+    doc.text("Stock remaining with Meld", 40, y);
+    y += 18;
+    doc.setFontSize(11);
+    for (const r of stock) {
+      if (y > 800) {
+        doc.addPage();
+        y = 50;
+      }
+      row(r.product.slice(0, 60), `${r.stock} unit${r.stock === 1 ? "" : "s"}`);
+    }
+  }
 
   doc.setFontSize(9);
   y += 16;

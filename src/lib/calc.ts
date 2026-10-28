@@ -158,6 +158,21 @@ export function reportTotals(rows: ReportRow[]): ReportTotals {
   return t;
 }
 
+export type StockRow = { product: string; stock: number };
+
+/**
+ * Stock a merchant still holds with Meld, for the remittance. Empty when they keep no stock with us
+ * (every product at zero). Otherwise lists products with stock, plus any sold out in this remittance.
+ */
+export function stockRemaining(products: { name: string; stock: number }[], soldProducts: string[]): StockRow[] {
+  if (!products.some((p) => toNum(p.stock) !== 0)) return [];
+  const sold = new Set(soldProducts.map((p) => p.toLowerCase()));
+  return products
+    .filter((p) => toNum(p.stock) !== 0 || sold.has(p.name.toLowerCase()))
+    .map((p) => ({ product: p.name, stock: Math.round(toNum(p.stock)) }))
+    .sort((a, b) => a.product.localeCompare(b.product));
+}
+
 /** Closest product by shared words; "" when nothing overlaps. */
 export function matchProduct(extracted: string | null | undefined, products: string[]): string {
   const text = String(extracted ?? "").toLowerCase().trim();

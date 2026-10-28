@@ -13,6 +13,7 @@ import {
   isValidPhone,
   remitSummary,
   reportTotals,
+  stockRemaining,
   toNum,
   type RemitLine,
 } from "./calc";
@@ -79,6 +80,24 @@ describe("remittance", () => {
 
   it("is zero with no lines", () => {
     expect(remitSummary([], 0).expected).toBe(0);
+  });
+});
+
+describe("stock remaining", () => {
+  it("lists stocked products and ones sold out today", () => {
+    const products = [
+      { name: "Shea", stock: 12 },
+      { name: "Soap", stock: 0 },
+      { name: "Oil", stock: 0 },
+    ];
+    expect(stockRemaining(products, ["soap"])).toEqual([
+      { product: "Shea", stock: 12 },
+      { product: "Soap", stock: 0 },
+    ]);
+  });
+  it("is empty for merchants who keep no stock with us", () => {
+    expect(stockRemaining([{ name: "Shea", stock: 0 }], ["Shea"])).toEqual([]);
+    expect(stockRemaining([], [])).toEqual([]);
   });
 });
 

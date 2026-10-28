@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useFeedback } from "@/components/feedback";
-import { LINE_TYPES, dmy, naira, remitSummary, toNum, type LineType, type RemitSummary } from "@/lib/calc";
+import { LINE_TYPES, dmy, naira, remitSummary, stockRemaining, toNum, type LineType, type RemitSummary, type StockRow } from "@/lib/calc";
 import type { Merchant, Remittance, RemittanceLine } from "@/lib/types";
 import { generateRemittance, saveRemittance, setRemittanceStatus } from "@/app/actions/remittance";
 import { buildRemitPdf } from "./remit-pdf";
@@ -24,7 +24,7 @@ const toLine = (l: RemittanceLine): Line => ({
 });
 const newId = () => `new-${Math.random().toString(36).slice(2, 9)}`;
 
-export function remitText(merchantName: string, date: string, s: RemitSummary, note: string) {
+export function remitText(merchantName: string, date: string, s: RemitSummary, note: string, stock: StockRow[]) {
   return [
     `Meld remittance – ${merchantName} – ${dmy(date)}`,
     "",
@@ -36,6 +36,7 @@ export function remitText(merchantName: string, date: string, s: RemitSummary, n
     `Other deductions: −${naira(s.other)}${note ? ` (${note})` : ""}`,
     "",
     `Expected remittance: ${naira(s.expected)}`,
+    ...(stock.length ? ["", "Stock remaining with Meld:", ...stock.map((r) => `• ${r.product}: ${r.stock}`)] : []),
     "",
     "MELD Logistics Company Ltd",
   ].join("\n");
@@ -51,7 +52,8 @@ export function RemitEditor({
   merchant: Merchant;
   remit: Remittance;
   initialLines: RemittanceLine[];
-  products: string[];
+  /** Current stock per product; used live while the remittance is a draft. */
+  products: { name: string; stock: number }[];
   history: Hist[];
 }) {
   const router = useRouter();
@@ -78,6 +80,9 @@ export function RemitEditor({
     [lines],
   );
   const s = remitSummary(parsed, toNum(other));
+  // Saved when the remittance was sent or paid; live from the products until then.
+  const frozen = Array.isArray(remit.stock_snapshot) ? remit.stock_snapshot : null;
+  const stock = frozen ?? stockRemaining(products, parsed.map((l) => l.product));
 
   const flush = useCallback(async () => {
     clearTimeout(timer.current);
@@ -177,13 +182,13 @@ export function RemitEditor({
 
   const pdf = async () => {
     try {
-      await buildRemitPdf(merchant.name, remit.remit_date, s, note, parsed);
+      await buildRemitPdf(merchant.name, remit.remit_date, s, note, parsed, stock);
     } catch {
       toast("Couldn’t make the PDF. Try again.");
     }
   };
 
-  const text = remitText(merchant.name, remit.remit_date, s, note);
+  const text = remitText(merchant.name, remit.remit_date, s, note, stock);
   const waPhone = merchant.phone.replace(/\D/g, "").replace(/^0/, "234");
   const waHref = `https://wa.me/${waPhone}?text=${encodeURIComponent(text)}`;
   const mailHref = `mailto:${merchant.email}?subject=${encodeURIComponent(`Remittance for ${dmy(remit.remit_date)}`)}&body=${encodeURIComponent(text)}`;
@@ -269,7 +274,7 @@ export function RemitEditor({
               </table>
               <datalist id="rProd">
                 {products.map((p) => (
-                  <option key={p} value={p} />
+                  <option key={p.name} value={p.name} />
                 ))}
               </datalist>
             </div>
@@ -383,6 +388,24 @@ export function RemitEditor({
               <span className="num">{naira(s.other)}</span>
             </div>
           </div>
+          {stock.length > 0 && (
+            <div className="sumrows" style={{ marginTop: 16 }}>
+              <div style={{ fontWeight: 700 }}>
+                <span>Stock remaining with Meld</span>
+                <span className="small muted" style={{ fontWeight: 400 }}>
+                  {frozen ? `as at ${remit.status}` : "live"}
+                </span>
+              </div>
+              {stock.map((r) => (
+                <div className="sub" key={r.product}>
+                  <span>{r.product}</span>
+                  <span className="num" style={r.stock <= 0 ? { color: "var(--danger)", fontWeight: 700 } : undefined}>
+                    {r.stock}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="sendrow">
             <button className="btn" type="button" onClick={pdf}>
               <Icon name="dl" />

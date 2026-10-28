@@ -16,6 +16,7 @@ All of these live in `src/lib/calc.ts` and are covered by tests (`npm test`).
 | Failed or returned lines are charged 50% of the amount charged | `FAILED_FEE_SHARE` |
 | Line type: failed/returned status → Failed; “waybill” in the customer name → Waybill | `autoLineType()` |
 | Delivered orders take their quantity out of the product’s stock | SQL trigger `orders_stock` |
+| Remittances show the merchant’s stock remaining (live while a draft, saved when sent or paid); hidden for merchants with no stock held | `stockRemaining()`, `remittances.stock_snapshot` |
 
 If you change the markup, change both `markup()` and `meld_charged()`.
 

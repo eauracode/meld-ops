@@ -17,7 +17,8 @@ export default async function RemittancePage({ searchParams }: { searchParams: P
   const [{ data: remit }, { data: history }, { count }, { data: products }] = await Promise.all([
     supabase
       .from("remittances")
-      .select("id,merchant_id,remit_date,status,other_deductions,other_note")
+      // "*" so the page still loads before migration 002 adds stock_snapshot.
+      .select("*")
       .eq("merchant_id", merchant.id)
       .eq("remit_date", date)
       .maybeSingle(),
@@ -34,7 +35,7 @@ export default async function RemittancePage({ searchParams }: { searchParams: P
       .eq("merchant_id", merchant.id)
       .eq("delivery_date", date)
       .in("status", ["Delivered", "Failed", "Returned"]),
-    supabase.from("products").select("name").eq("merchant_id", merchant.id).order("name"),
+    supabase.from("products").select("name,stock").eq("merchant_id", merchant.id).order("name"),
   ]);
 
   let lines: RemittanceLine[] = [];
@@ -73,7 +74,7 @@ export default async function RemittancePage({ searchParams }: { searchParams: P
           merchant={merchant}
           remit={remit as Remittance}
           initialLines={lines}
-          products={(products ?? []).map((p) => p.name as string)}
+          products={(products ?? []) as { name: string; stock: number }[]}
           history={hist}
         />
       ) : (

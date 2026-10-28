@@ -1,4 +1,4 @@
-import type { LineType, OrderStatus, Payment } from "./calc";
+import type { LineType, OrderStatus, Payment, StockRow } from "./calc";
 
 export type Role = "ops" | "admin";
 
@@ -53,6 +53,8 @@ export type Remittance = {
   status: "draft" | "sent" | "paid";
   other_deductions: number;
   other_note: string;
+  /** Missing until migration 002 is run. */
+  stock_snapshot?: StockRow[] | null;
 };
 
 export type RemittanceLine = {
