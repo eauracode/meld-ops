@@ -18,7 +18,7 @@ export async function signIn(_prev: FormState, form: FormData): Promise<FormStat
       : "That email and password don’t match. Try again or reset your password.";
     return { error: msg, email };
   }
-  redirect("/new");
+  redirect("/");
 }
 
 export async function sendReset(_prev: FormState, form: FormData): Promise<FormState> {
@@ -45,5 +45,5 @@ export async function setPassword(_prev: FormState, form: FormData): Promise<For
   }
   // The signed-in token still says "must change password" until it is reissued.
   await supabase.auth.refreshSession();
-  redirect("/new");
+  redirect("/");
 }

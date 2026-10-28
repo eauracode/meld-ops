@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { dmy, lagosToday, naira, reportTotals } from "@/lib/calc";
 import { NoMerchant } from "@/components/no-merchant";
+import { fetchAll } from "@/lib/fetch-all";
 import { ReportFilters } from "./report-filters";
 import { ExportCsv, type CsvRow } from "./export-csv";
 import type { Order, Rider } from "@/lib/types";
@@ -25,20 +26,24 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
   const view = sp.view === "riders" ? "riders" : "orders";
   const riderId = sp.rider ?? "";
 
-  let q = supabase
-    .from("orders")
-    .select("id,merchant_id,delivery_date,customer,address,area,pickup_station,product,qty,order_value,rider_fee,amount_charged,rider_id,notes")
-    .eq("status", "Delivered")
-    .gte("delivery_date", from)
-    .lte("delivery_date", to)
-    .order("delivery_date")
-    .order("created_at")
-    .limit(5000);
-  if (merchantId) q = q.eq("merchant_id", merchantId);
-  if (riderId) q = q.eq("rider_id", riderId);
+  const page = (a: number, b: number) => {
+    let q = supabase
+      .from("orders")
+      .select("id,merchant_id,delivery_date,customer,address,area,pickup_station,product,qty,order_value,rider_fee,amount_charged,rider_id,notes")
+      .eq("status", "Delivered")
+      .gte("delivery_date", from)
+      .lte("delivery_date", to)
+      .order("delivery_date")
+      .order("id");
+    if (merchantId) q = q.eq("merchant_id", merchantId);
+    if (riderId) q = q.eq("rider_id", riderId);
+    return q.range(a, b);
+  };
 
-  const [{ data }, { data: riderRows }] = await Promise.all([q, supabase.from("riders").select("id,name,phone,active").order("name")]);
-  const rows = (data ?? []) as Order[];
+  const [rows, { data: riderRows }] = await Promise.all([
+    fetchAll<Order>(page),
+    supabase.from("riders").select("id,name,phone,active").order("name"),
+  ]);
   const riders = (riderRows ?? []) as Rider[];
   const riderName = (id: string | null) => riders.find((r) => r.id === id)?.name ?? "";
   const merchantName = (id: string) => merchants.find((m) => m.id === id)?.name ?? "";

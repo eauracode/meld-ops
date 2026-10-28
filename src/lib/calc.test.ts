@@ -15,6 +15,12 @@ import {
   reportTotals,
   stockRemaining,
   toNum,
+  change,
+  dashboardStats,
+  periodRange,
+  shiftPeriod,
+  trendKeys,
+  type DashOrder,
   type RemitLine,
 } from "./calc";
 
@@ -80,6 +86,76 @@ describe("remittance", () => {
 
   it("is zero with no lines", () => {
     expect(remitSummary([], 0).expected).toBe(0);
+  });
+});
+
+describe("overview dashboard", () => {
+  it("finds the period around a date", () => {
+    expect(periodRange("day", "2026-10-28")).toEqual({ from: "2026-10-28", to: "2026-10-28" });
+    // 28 Oct 2026 is a Wednesday; weeks start Monday.
+    expect(periodRange("week", "2026-10-28")).toEqual({ from: "2026-10-26", to: "2026-11-01" });
+    expect(periodRange("month", "2026-02-10")).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(periodRange("month", "2026-12-31")).toEqual({ from: "2026-12-01", to: "2026-12-31" });
+    expect(periodRange("year", "2026-06-01")).toEqual({ from: "2026-01-01", to: "2026-12-31" });
+  });
+
+  it("steps to the previous and next period", () => {
+    expect(shiftPeriod("day", "2026-11-01", -1)).toBe("2026-10-31");
+    expect(shiftPeriod("week", "2026-10-28", 1)).toBe("2026-11-02");
+    expect(shiftPeriod("month", "2026-01-15", -1)).toBe("2025-12-01");
+    expect(shiftPeriod("month", "2026-12-15", 1)).toBe("2027-01-01");
+    expect(shiftPeriod("year", "2026-06-01", -1)).toBe("2025-01-01");
+  });
+
+  it("totals deliveries, failures, money and the breakdowns", () => {
+    const o = (date: string, status: string, rider: string | null, fee = 2500, value = 10000, payment = "Cash on delivery"): DashOrder => ({
+      delivery_date: date,
+      merchant_id: "m1",
+      rider_id: rider,
+      status,
+      order_value: value,
+      rider_fee: fee,
+      amount_charged: charged(fee),
+      payment,
+      area: "Ikeja",
+    });
+    const s = dashboardStats(
+      [
+        o("2026-10-01", "Delivered", "r1"),
+        o("2026-10-01", "Delivered", "r1", 3500, 20000, "Already paid"),
+        o("2026-10-02", "Failed", "r2"),
+        o("2026-10-02", "Returned", "r1"),
+        o("2026-10-03", "Pending", null),
+      ],
+      "2026-10-01",
+      "2026-10-03",
+      "day",
+    );
+    expect(s.orders).toBe(5);
+    expect(s.delivered).toBe(2);
+    expect(s.failed).toBe(2);
+    expect(s.open).toBe(1);
+    expect(s.successRate).toBe(0.5);
+    expect(s.orderValue).toBe(30000);
+    expect(s.cashCollected).toBe(10000); // the prepaid order isn't cash collected
+    expect(s.revenue).toBe(2000 + 1500);
+    expect(s.byRider.r1).toMatchObject({ orders: 3, delivered: 2, failed: 1 });
+    expect(s.byRider[""]).toMatchObject({ orders: 1, delivered: 0 });
+    expect(s.trend).toEqual([
+      { key: "2026-10-01", delivered: 2, failed: 0 },
+      { key: "2026-10-02", delivered: 0, failed: 2 },
+      { key: "2026-10-03", delivered: 0, failed: 0 },
+    ]);
+    expect(s.byArea).toEqual([{ area: "Ikeja", delivered: 2 }]);
+  });
+
+  it("buckets by month for a year and handles an empty period", () => {
+    expect(trendKeys("2026-01-01", "2026-12-31", "month")).toHaveLength(12);
+    const s = dashboardStats([], "2026-01-01", "2026-03-31", "month");
+    expect(s.successRate).toBeNull();
+    expect(s.trend.map((t) => t.key)).toEqual(["2026-01", "2026-02", "2026-03"]);
+    expect(change(150, 100)).toBe(0.5);
+    expect(change(5, 0)).toBeNull();
   });
 });
 

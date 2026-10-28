@@ -11,6 +11,7 @@ import { roleLabel, type Merchant, type Profile } from "@/lib/types";
 type View = { href: string; label: string; short: string; icon: IconName; admin?: boolean; group?: string };
 
 const VIEWS: View[] = [
+  { href: "/dashboard", label: "Overview", short: "Overview", icon: "dash", admin: true },
   { href: "/new", label: "New order", short: "New", icon: "order" },
   { href: "/orders", label: "Orders", short: "Orders", icon: "list" },
   { href: "/report", label: "Delivery report", short: "Report", icon: "report", admin: true, group: "Finance" },
@@ -19,7 +20,7 @@ const VIEWS: View[] = [
   { href: "/riders", label: "Riders", short: "Riders", icon: "rider" },
   { href: "/team", label: "Team and access", short: "Team", icon: "team", admin: true },
 ];
-const MOBILE = ["/new", "/orders", "/report", "/remittance", "/team"];
+const MOBILE = ["/dashboard", "/new", "/orders", "/report", "/remittance"];
 
 type Theme = "system" | "light" | "dark";
 

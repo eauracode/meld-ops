@@ -2,6 +2,14 @@
 const P = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" } as const;
 
 const paths = {
+  dash: (
+    <>
+      <rect x="3" y="3" width="7.5" height="9" rx="1.5" />
+      <rect x="13.5" y="3" width="7.5" height="5" rx="1.5" />
+      <rect x="13.5" y="11" width="7.5" height="10" rx="1.5" />
+      <rect x="3" y="15" width="7.5" height="6" rx="1.5" />
+    </>
+  ),
   order: <path d="M12 5v14M5 12h14" />,
   list: <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />,
   report: <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,

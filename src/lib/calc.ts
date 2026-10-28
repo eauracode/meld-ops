@@ -158,6 +158,132 @@ export function reportTotals(rows: ReportRow[]): ReportTotals {
   return t;
 }
 
+// ---------- overview dashboard ----------
+
+export type Period = "day" | "week" | "month" | "year";
+export type Grain = "day" | "month";
+
+/** The period containing `anchor`: [from, to] inclusive, weeks starting Monday. */
+export function periodRange(period: Period, anchor: string): { from: string; to: string } {
+  const [y, m] = anchor.split("-").map(Number);
+  if (period === "day") return { from: anchor, to: anchor };
+  if (period === "week") {
+    const dow = (new Date(anchor + "T12:00:00Z").getUTCDay() + 6) % 7; // Monday = 0
+    const from = addDays(anchor, -dow);
+    return { from, to: addDays(from, 6) };
+  }
+  if (period === "month") {
+    const from = `${y}-${String(m).padStart(2, "0")}-01`;
+    return { from, to: addDays(m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`, -1) };
+  }
+  return { from: `${y}-01-01`, to: `${y}-12-31` };
+}
+
+/** Same period, one step back or forward. */
+export function shiftPeriod(period: Period, anchor: string, step: -1 | 1): string {
+  const { from } = periodRange(period, anchor);
+  if (period === "day") return addDays(anchor, step);
+  if (period === "week") return addDays(from, 7 * step);
+  const [y, m] = from.split("-").map(Number);
+  if (period === "year") return `${y + step}-01-01`;
+  const mm = m + step;
+  return mm < 1 ? `${y - 1}-12-01` : mm > 12 ? `${y + 1}-01-01` : `${y}-${String(mm).padStart(2, "0")}-01`;
+}
+
+export type DashOrder = {
+  delivery_date: string;
+  merchant_id: string;
+  rider_id: string | null;
+  status: string;
+  order_value: number;
+  rider_fee: number;
+  amount_charged: number;
+  payment: string;
+  area: string;
+};
+
+export type DashTally = {
+  orders: number;
+  delivered: number;
+  failed: number;
+  orderValue: number;
+  charged: number;
+  riderFees: number;
+  revenue: number;
+};
+
+export type DashStats = DashTally & {
+  open: number;
+  cashCollected: number;
+  /** delivered ÷ (delivered + failed); null when nothing was finished. */
+  successRate: number | null;
+  byStatus: Record<string, number>;
+  byMerchant: Record<string, DashTally>;
+  /** Keyed by rider id; "" holds unassigned orders. */
+  byRider: Record<string, DashTally>;
+  byArea: { area: string; delivered: number }[];
+  trend: { key: string; delivered: number; failed: number }[];
+};
+
+const isFailed = (s: string) => s === "Failed" || s === "Returned";
+const blankTally = (): DashTally => ({ orders: 0, delivered: 0, failed: 0, orderValue: 0, charged: 0, riderFees: 0, revenue: 0 });
+
+/** Every bucket key from `from` to `to`: each day, or each month (YYYY-MM). */
+export function trendKeys(from: string, to: string, grain: Grain): string[] {
+  const keys: string[] = [];
+  if (grain === "day") for (let d = from; d <= to; d = addDays(d, 1)) keys.push(d);
+  else for (let d = from.slice(0, 7) + "-01"; d <= to; d = shiftPeriod("month", d, 1)) keys.push(d.slice(0, 7));
+  return keys;
+}
+
+/**
+ * Overview figures for a set of orders. Money (order value, charges, revenue) counts Delivered only;
+ * cash collected is Delivered and cash on delivery. Revenue = amount charged − rider fee.
+ */
+export function dashboardStats(orders: DashOrder[], from: string, to: string, grain: Grain): DashStats {
+  const s: DashStats = { ...blankTally(), open: 0, cashCollected: 0, successRate: null, byStatus: {}, byMerchant: {}, byRider: {}, byArea: [], trend: [] };
+  const trend = new Map(trendKeys(from, to, grain).map((k) => [k, { key: k, delivered: 0, failed: 0 }]));
+  const areas: Record<string, number> = {};
+
+  for (const o of orders) {
+    const delivered = o.status === "Delivered";
+    const failed = isFailed(o.status);
+    s.byStatus[o.status] = (s.byStatus[o.status] ?? 0) + 1;
+    if (!delivered && !failed) s.open += 1;
+    if (delivered && /cash/i.test(o.payment)) s.cashCollected += toNum(o.order_value);
+
+    for (const t of [s, (s.byMerchant[o.merchant_id] ??= blankTally()), (s.byRider[o.rider_id ?? ""] ??= blankTally())]) {
+      t.orders += 1;
+      if (failed) t.failed += 1;
+      if (delivered) {
+        t.delivered += 1;
+        t.orderValue += toNum(o.order_value);
+        t.charged += toNum(o.amount_charged);
+        t.riderFees += toNum(o.rider_fee);
+        t.revenue += toNum(o.amount_charged) - toNum(o.rider_fee);
+      }
+    }
+
+    if (delivered && o.area) areas[o.area] = (areas[o.area] ?? 0) + 1;
+    const bucket = trend.get(grain === "day" ? o.delivery_date : o.delivery_date.slice(0, 7));
+    if (bucket && delivered) bucket.delivered += 1;
+    if (bucket && failed) bucket.failed += 1;
+  }
+
+  const finished = s.delivered + s.failed;
+  s.successRate = finished ? s.delivered / finished : null;
+  s.byArea = Object.entries(areas)
+    .map(([area, delivered]) => ({ area, delivered }))
+    .sort((a, b) => b.delivered - a.delivered || a.area.localeCompare(b.area));
+  s.trend = [...trend.values()];
+  return s;
+}
+
+/** Percentage change, or null when there's nothing to compare with. */
+export function change(now: number, before: number): number | null {
+  return before ? (now - before) / before : null;
+}
+
 export type StockRow = { product: string; stock: number };
 
 /**
