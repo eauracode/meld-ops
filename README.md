@@ -22,6 +22,8 @@ If you change the markup, change both `markup()` and `meld_charged()`.
 
 An order’s amount charged can be changed by hand (for a discount or special price) by editing **Amount charged** on its remittance line. That sets `orders.charge_override`, which replaces the markup for that order everywhere (dashboard, delivery report). The report tags those charges “edited”.
 
+**Rider pay** lists each rider’s delivered orders for a date range. Admins can change the rider pay on unpaid orders; the merchant’s charge stays the same (pinned as a manual charge), so only revenue moves. **Mark paid** records one payment (`rider_payouts`) covering every unpaid delivered order for that rider in the range and locks their pay; **Undo** reverses it.
+
 ## First-time setup
 
 ### 1. Supabase (free)
