@@ -161,6 +161,22 @@ create table public.remittance_lines (
 );
 create index remittance_lines_remit on public.remittance_lines (remittance_id, position);
 
+-- ---------- rider pay ----------
+create table public.rider_payouts (
+  id uuid primary key default gen_random_uuid(),
+  rider_id uuid not null references public.riders (id) on delete restrict,
+  amount integer not null check (amount >= 0),
+  orders integer not null default 0,
+  period_from date not null,
+  period_to date not null,
+  paid_at timestamptz not null default now(),
+  paid_by uuid references public.profiles (id) on delete set null default auth.uid()
+);
+create index rider_payouts_rider on public.rider_payouts (rider_id, paid_at desc);
+
+-- The payout that settled this order's rider pay; null = not paid yet.
+alter table public.orders add column rider_payout_id uuid references public.rider_payouts (id) on delete set null;
+
 -- ---------- access rules ----------
 create function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
@@ -186,6 +202,7 @@ alter table public.riders enable row level security;
 alter table public.orders enable row level security;
 alter table public.remittances enable row level security;
 alter table public.remittance_lines enable row level security;
+alter table public.rider_payouts enable row level security;
 
 create policy "own or admin reads profiles" on public.profiles for select using (id = auth.uid() or public.is_admin());
 create policy "admin updates profiles" on public.profiles for update using (public.is_admin());
@@ -214,3 +231,4 @@ create policy "delete orders" on public.orders for delete using (public.can_acce
 
 create policy "admin remittances" on public.remittances for all using (public.is_admin()) with check (public.is_admin());
 create policy "admin remittance lines" on public.remittance_lines for all using (public.is_admin()) with check (public.is_admin());
+create policy "admin rider payouts" on public.rider_payouts for all using (public.is_admin()) with check (public.is_admin());

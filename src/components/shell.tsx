@@ -16,6 +16,7 @@ const VIEWS: View[] = [
   { href: "/orders", label: "Orders", short: "Orders", icon: "list" },
   { href: "/report", label: "Delivery report", short: "Report", icon: "report", admin: true, group: "Finance" },
   { href: "/remittance", label: "Remittance", short: "Remit", icon: "remit", admin: true },
+  { href: "/rider-pay", label: "Rider pay", short: "Pay", icon: "rider", admin: true },
   { href: "/merchants", label: "Merchant settings", short: "Merchant", icon: "store", admin: true, group: "Setup" },
   { href: "/riders", label: "Riders", short: "Riders", icon: "rider" },
   { href: "/team", label: "Team and access", short: "Team", icon: "team", admin: true },
