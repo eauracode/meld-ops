@@ -1,6 +1,7 @@
 import { requireAdmin } from "@/lib/session";
 import { addDays, dmy, lagosToday, remitSummary } from "@/lib/calc";
 import { NoMerchant } from "@/components/no-merchant";
+import { FINISHED, addMissingOrders } from "@/lib/remit-lines";
 import { RemitDate, GenerateButton } from "./controls";
 import { RemitEditor } from "./remit-editor";
 import type { Remittance, RemittanceLine } from "@/lib/types";
@@ -34,7 +35,7 @@ export default async function RemittancePage({ searchParams }: { searchParams: P
       .select("id", { count: "exact", head: true })
       .eq("merchant_id", merchant.id)
       .eq("delivery_date", date)
-      .in("status", ["Delivered", "Failed", "Returned"]),
+      .in("status", FINISHED),
     supabase.from("products").select("name,stock").eq("merchant_id", merchant.id).order("name"),
   ]);
 
@@ -46,6 +47,7 @@ export default async function RemittancePage({ searchParams }: { searchParams: P
       .eq("remittance_id", remit.id)
       .order("position");
     lines = (data ?? []) as RemittanceLine[];
+    if (remit.status === "draft") lines = await addMissingOrders(supabase, remit, lines);
   }
 
   const hist = (history ?? []).map((h) => ({
@@ -70,7 +72,7 @@ export default async function RemittancePage({ searchParams }: { searchParams: P
       </div>
       {remit ? (
         <RemitEditor
-          key={`${remit.id}-${remit.status}`}
+          key={`${remit.id}-${remit.status}-${lines.length}`}
           merchant={merchant}
           remit={remit as Remittance}
           initialLines={lines}

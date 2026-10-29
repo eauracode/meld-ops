@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { LINE_TYPES, autoLineType, charged, stockRemaining, toNum, type LineType } from "@/lib/calc";
+import { LINE_TYPES, charged, stockRemaining, toNum, type LineType } from "@/lib/calc";
+import { finishedOrders, orderToLine } from "@/lib/remit-lines";
 import { actionSession, type Session } from "@/lib/session";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -43,13 +44,7 @@ export async function generateRemittance(merchantId: string, date: string): Prom
     .maybeSingle();
   if (existing?.status === "paid") return { ok: false, error: "This remittance is paid and locked." };
 
-  const { data: orders, error: oErr } = await s.supabase
-    .from("orders")
-    .select("id,customer,product,qty,order_value,amount_charged,status")
-    .eq("merchant_id", merchantId)
-    .eq("delivery_date", date)
-    .in("status", ["Delivered", "Failed", "Returned"])
-    .order("created_at");
+  const { data: orders, error: oErr } = await finishedOrders(s.supabase, merchantId, date);
   if (oErr) return { ok: false, error: oErr.message };
 
   let id = existing?.id as string | undefined;
@@ -66,22 +61,7 @@ export async function generateRemittance(merchantId: string, date: string): Prom
     id = data.id as string;
   }
 
-  const lines = cleanLines(
-    id,
-    (orders ?? []).map((o) => {
-      const type = autoLineType(o.status, o.customer);
-      return {
-        order_id: o.id,
-        customer: o.customer,
-        // Quantity and value only count for lines that collected money.
-        product: o.product,
-        qty: type === "Failed" ? 0 : o.qty,
-        order_value: type === "Failed" ? 0 : o.order_value,
-        amount_charged: o.amount_charged,
-        type,
-      };
-    }),
-  );
+  const lines = (orders ?? []).map((o, i) => orderToLine(id!, o, i));
   if (lines.length) {
     const { error } = await s.supabase.from("remittance_lines").insert(lines);
     if (error) return { ok: false, error: error.message };
