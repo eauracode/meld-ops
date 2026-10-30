@@ -46,6 +46,8 @@ export type OrderInput = {
   contact_customer: boolean;
   status: string;
   raw_message: string;
+  /** Station the stock comes from; left out before migration 005. */
+  station_id?: string | null;
 };
 
 export type SaveResult =
@@ -76,6 +78,7 @@ export async function saveOrder(input: OrderInput, force = false): Promise<SaveR
     contact_customer: Boolean(input.contact_customer),
     status: (STATUSES as readonly string[]).includes(input.status) ? (input.status as OrderStatus) : "Pending",
     raw_message: input.raw_message.slice(0, 4000),
+    ...(input.station_id !== undefined ? { station_id: input.station_id || null } : {}),
   };
 
   const missing: string[] = [];

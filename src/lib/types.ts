@@ -22,6 +22,21 @@ export type Merchant = {
 export type Product = { id: string; merchant_id: string; name: string; price: number; stock: number };
 export type Rate = { merchant_id: string; area: string; rider_fee: number };
 export type Rider = { id: string; name: string; phone: string; active: boolean };
+export type Station = { id: string; name: string; address: string; active: boolean };
+export type StationStock = { product_id: string; station_id: string; qty: number };
+export type StockKind = "added" | "moved" | "delivered" | "undelivered" | "corrected";
+export type StockMove = {
+  id: string;
+  product: string;
+  kind: StockKind;
+  qty: number;
+  from_station: string | null;
+  to_station: string | null;
+  order_id: number | null;
+  note: string;
+  created_by: string | null;
+  created_at: string;
+};
 
 export type Order = {
   id: number;

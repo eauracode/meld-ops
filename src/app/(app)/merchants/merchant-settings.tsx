@@ -5,8 +5,10 @@ import { useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { useFeedback } from "@/components/feedback";
 import { charged, naira, toNum } from "@/lib/calc";
-import type { Merchant, Product, Rate } from "@/lib/types";
+import type { Merchant, Product, Rate, Station, StationStock, StockMove } from "@/lib/types";
 import { addMerchant, deleteProduct, deleteRate, saveMerchant, setRate, upsertProduct } from "@/app/actions/settings";
+import { setDefaultStation } from "@/app/actions/stock";
+import { StockHistory, StockPanel } from "./stock-panel";
 
 export function AddMerchantButton({ primary }: { primary?: boolean }) {
   const router = useRouter();
@@ -60,9 +62,36 @@ export function AddMerchantButton({ primary }: { primary?: boolean }) {
   );
 }
 
-export function MerchantSettings({ merchant, products, rates }: { merchant: Merchant; products: Product[]; rates: Rate[] }) {
+export function MerchantSettings({
+  merchant,
+  products,
+  rates,
+  stations,
+  stock,
+  moves,
+  people,
+  defaultStationId,
+}: {
+  merchant: Merchant;
+  products: Product[];
+  rates: Rate[];
+  /** null until migration 005 is run */
+  stations: Station[] | null;
+  stock: StationStock[];
+  moves: StockMove[];
+  people: Record<string, string>;
+  defaultStationId: string | null;
+}) {
   const router = useRouter();
   const { toast } = useFeedback();
+  const activeStations = (stations ?? []).filter((s) => s.active);
+  const openingStation = activeStations.find((s) => s.id === defaultStationId)?.id ?? activeStations[0]?.id ?? null;
+
+  const changeDefaultStation = async (id: string) => {
+    const r = await setDefaultStation(merchant.id, id || null);
+    toast(r.ok ? (id ? `New orders now default to ${activeStations.find((s) => s.id === id)?.name}` : "New orders now default to no station") : r.error);
+    router.refresh();
+  };
   const [details, setDetails] = useState({ name: merchant.name, phone: merchant.phone, email: merchant.email, pickup_address: merchant.pickup_address });
   const [q, setQ] = useState("");
   const [newArea, setNewArea] = useState("");
@@ -78,14 +107,14 @@ export function MerchantSettings({ merchant, products, rates }: { merchant: Merc
 
   const saveProduct = async (p: Product, patch: Partial<Product>) => {
     const next = { ...p, ...patch };
-    if (next.name === p.name && next.price === p.price && next.stock === p.stock) return;
-    const r = await upsertProduct(next);
+    if (next.name === p.name && next.price === p.price) return;
+    const r = await upsertProduct({ id: p.id, merchant_id: p.merchant_id, name: next.name, price: next.price });
     if (!r.ok) toast(r.error);
     router.refresh();
   };
 
   const addProduct = async () => {
-    const r = await upsertProduct({ merchant_id: merchant.id, ...newProduct });
+    const r = await upsertProduct({ merchant_id: merchant.id, ...newProduct, stationId: openingStation });
     if (!r.ok) return toast(r.error);
     setNewProduct({ name: "", price: "", stock: "" });
     router.refresh();
@@ -96,7 +125,7 @@ export function MerchantSettings({ merchant, products, rates }: { merchant: Merc
     if (!r.ok) return toast(r.error);
     router.refresh();
     toast(`${p.name} removed`, async () => {
-      await upsertProduct({ merchant_id: merchant.id, name: p.name, price: p.price, stock: p.stock });
+      await upsertProduct({ merchant_id: merchant.id, name: p.name, price: p.price, stock: p.stock, stationId: openingStation });
       router.refresh();
     });
   };
@@ -156,6 +185,22 @@ export function MerchantSettings({ merchant, products, rates }: { merchant: Merc
                   <label htmlFor="mPick">Pickup address</label>
                   <input className="input" id="mPick" value={details.pickup_address} onChange={(e) => setDetails({ ...details, pickup_address: e.target.value })} />
                 </div>
+                {stations && (
+                  <div className="field">
+                    <label htmlFor="mStation">Default station</label>
+                    <select className="input" id="mStation" value={defaultStationId ?? ""} onChange={(e) => changeDefaultStation(e.target.value)} aria-describedby="mStationHelp">
+                      <option value="">None (merchant ships from their own address)</option>
+                      {activeStations.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="small muted" id="mStationHelp">
+                      Preselected on new orders. Saved as soon as you pick.
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="formfoot">
                 <button className="btn primary" type="button" onClick={saveDetails}>
@@ -169,7 +214,7 @@ export function MerchantSettings({ merchant, products, rates }: { merchant: Merc
             <div className="panel-h">
               <h2>Products</h2>
               <span className="spacer" />
-              <span className="small muted">Stock goes down when an order is marked Delivered</span>
+              <span className="small muted">{stations ? "Change stock under Stock by station" : "Stock goes down when an order is marked Delivered"}</span>
             </div>
             <div className="tablewrap">
               <table className="cards">
@@ -177,7 +222,7 @@ export function MerchantSettings({ merchant, products, rates }: { merchant: Merc
                   <tr>
                     <th>Product</th>
                     <th className="num">Price</th>
-                    <th className="num">Stock at pickup</th>
+                    <th className="num">Stock</th>
                     <th>
                       <span className="sr">Remove</span>
                     </th>
@@ -193,7 +238,7 @@ export function MerchantSettings({ merchant, products, rates }: { merchant: Merc
                         <input className="input num" style={{ width: 120 }} aria-label={`Price of ${p.name}`} inputMode="numeric" defaultValue={p.price} onBlur={(e) => saveProduct(p, { price: toNum(e.target.value) })} />
                       </td>
                       <td data-l="Stock" className="num">
-                        <input className="input num" style={{ width: 90 }} aria-label={`Stock of ${p.name}`} inputMode="numeric" defaultValue={p.stock} onBlur={(e) => saveProduct(p, { stock: toNum(e.target.value) })} />
+                        {p.stock}
                       </td>
                       <td>
                         <button className="icon-btn" type="button" aria-label={`Remove ${p.name}`} onClick={() => removeProduct(p)}>
@@ -223,7 +268,7 @@ export function MerchantSettings({ merchant, products, rates }: { merchant: Merc
                   <input className="input" id="npPrice" inputMode="numeric" value={newProduct.price} onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })} />
                 </div>
                 <div className="field" style={{ minWidth: 90, width: 90 }}>
-                  <label htmlFor="npStock">Stock</label>
+                  <label htmlFor="npStock">Opening stock</label>
                   <input className="input" id="npStock" inputMode="numeric" value={newProduct.stock} onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })} />
                 </div>
                 <button className="btn" type="button" onClick={addProduct}>
@@ -232,6 +277,17 @@ export function MerchantSettings({ merchant, products, rates }: { merchant: Merc
               </div>
             </div>
           </section>
+
+          {stations ? (
+            <>
+              <StockPanel products={products} stations={stations} stock={stock} defaultStationId={defaultStationId} />
+              <StockHistory moves={moves} stations={stations} people={people} />
+            </>
+          ) : (
+            <p className="small muted" style={{ marginTop: 12 }}>
+              To add or move stock between stations, run supabase/migrations/005_stations_and_backup.sql in Supabase.
+            </p>
+          )}
         </div>
 
         <div>

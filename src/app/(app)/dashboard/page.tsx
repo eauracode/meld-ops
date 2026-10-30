@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { fetchAll } from "@/lib/fetch-all";
 import {
+  addDays,
   change,
   dashboardStats,
   dmy,
@@ -16,6 +17,7 @@ import {
   type Period,
 } from "@/lib/calc";
 import type { RemittanceLine, Rider } from "@/lib/types";
+import { sheetsConfig } from "@/lib/google-sheets";
 import { DashFilters } from "./dash-filters";
 import { TrendChart } from "./trend-chart";
 
@@ -124,8 +126,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const topAreas = s.byArea.slice(0, 8);
   const maxArea = Math.max(1, ...topAreas.map((a) => a.delivered));
 
+  // Once backups are set up, warn if none has succeeded in the last two days.
+  const backupOn = Boolean(sheetsConfig());
+  const { data: lastBackup } = backupOn
+    ? await supabase.from("backup_runs").select("ran_at").eq("ok", true).order("ran_at", { ascending: false }).limit(1).maybeSingle()
+    : { data: null };
+  const lastBackupDay = lastBackup ? lagosToday(new Date(lastBackup.ran_at as string)) : null;
+  const backupStale = backupOn && (!lastBackupDay || lastBackupDay < addDays(lagosToday(), -1));
+
   return (
     <>
+      {backupStale && (
+        <p className="warnbar" role="status">
+          {lastBackupDay ? `The data backup hasn’t run since ${dmy(lastBackupDay)}.` : "No data backup has run yet."}{" "}
+          <Link href="/team">Check the backup</Link>
+        </p>
+      )}
       <div className="pagehead">
         <div>
           <h1>Overview</h1>

@@ -27,7 +27,8 @@ export async function proxy(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const signedIn = Boolean(data?.claims);
   const path = request.nextUrl.pathname;
-  const isPublic = path.startsWith("/signin") || path.startsWith("/auth");
+  // /api/backup is the nightly cron; it checks CRON_SECRET itself.
+  const isPublic = path.startsWith("/signin") || path.startsWith("/auth") || path === "/api/backup";
 
   if (!signedIn && !isPublic) {
     const url = request.nextUrl.clone();

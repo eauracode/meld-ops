@@ -7,7 +7,7 @@ import { StatusPill } from "@/components/status-pill";
 import { useFeedback } from "@/components/feedback";
 import { STATUSES, charged, dmy, isValidPhone, markup, naira, normalisePhone, toNum } from "@/lib/calc";
 import type { Draft } from "@/lib/extract";
-import type { Merchant, Order, Product, Rider } from "@/lib/types";
+import type { Merchant, Order, Product, Rider, Station } from "@/lib/types";
 import { deleteOrder, extract, saveOrder, type OrderInput } from "@/app/actions/orders";
 
 type Form = Omit<Draft, "order_value" | "rider_fee"> & {
@@ -15,6 +15,7 @@ type Form = Omit<Draft, "order_value" | "rider_fee"> & {
   rider_fee: string;
   rider_id: string;
   pickup_station: string;
+  station_id: string;
   contact_customer: boolean;
   status: string;
 };
@@ -24,7 +25,7 @@ const NOT_ON_CARD = "__none";
 const MARKUP_HELP = "Rider fee + markup: under ₦3,000 adds ₦2,000; ₦3,000–4,999 adds ₦1,500; ₦5,000 and over adds ₦1,000";
 const fmt = (v: string) => (v === "" ? "" : toNum(v).toLocaleString("en-NG"));
 
-function blank(today: string, pickup: string): Form {
+function blank(today: string, pickup: string, station: string): Form {
   return {
     delivery_date: today,
     customer: "",
@@ -41,6 +42,7 @@ function blank(today: string, pickup: string): Form {
     uncertain: [],
     rider_id: "",
     pickup_station: pickup,
+    station_id: station,
     contact_customer: true,
     status: "Pending",
   };
@@ -53,6 +55,8 @@ export function NewOrder({
   rates,
   riders,
   todays,
+  stations,
+  defaultStationId,
 }: {
   merchant: Merchant;
   today: string;
@@ -60,7 +64,18 @@ export function NewOrder({
   rates: Record<string, number>;
   riders: Rider[];
   todays: Pick<Order, "id" | "customer" | "area" | "product" | "qty" | "order_value" | "status">[];
+  /** null until migration 005 is run: no station field then */
+  stations: Station[] | null;
+  defaultStationId: string | null;
 }) {
+  const activeStations = (stations ?? []).filter((s) => s.active);
+  const homeStation = activeStations.some((s) => s.id === defaultStationId) ? defaultStationId! : "";
+  // Picking a station fills Pickup station with its name and address (still editable).
+  const pickupFor = (id: string) => {
+    const s = activeStations.find((x) => x.id === id);
+    return s ? [s.name, s.address].filter(Boolean).join(", ") : merchant.pickup_address;
+  };
+  const startPickup = pickupFor(homeStation);
   const router = useRouter();
   const { toast, confirm } = useFeedback();
   const [paste, setPaste] = useState("");
@@ -87,7 +102,7 @@ export function NewOrder({
       }
       const d = r.draft;
       setForm({
-        ...blank(today, merchant.pickup_address),
+        ...blank(today, startPickup, homeStation),
         ...d,
         order_value: d.order_value === "" ? "" : String(d.order_value),
         rider_fee: d.rider_fee === "" ? "" : String(d.rider_fee),
@@ -101,7 +116,7 @@ export function NewOrder({
     } finally {
       setExtracting(false);
     }
-  }, [paste, merchant.id, merchant.pickup_address, today]);
+  }, [paste, merchant.id, startPickup, homeStation, today]);
 
   const doSave = useCallback(
     async () => {
@@ -126,6 +141,7 @@ export function NewOrder({
         contact_customer: form.contact_customer,
         status: form.status,
         raw_message: paste,
+        ...(stations ? { station_id: form.station_id || null } : {}),
       };
       try {
         // A duplicate warning the user overrides sends the same order again with force.
@@ -168,7 +184,7 @@ export function NewOrder({
         setSaving(false);
       }
     },
-    [form, saving, merchant.id, paste, router, toast, confirm],
+    [form, saving, merchant.id, paste, router, toast, confirm, stations],
   );
 
   useEffect(() => {
@@ -189,7 +205,7 @@ export function NewOrder({
 
   const manual = () => {
     setErr(null);
-    setForm(blank(today, merchant.pickup_address));
+    setForm(blank(today, startPickup, homeStation));
     requestAnimationFrame(() => document.getElementById("f-customer")?.focus());
   };
 
@@ -283,7 +299,7 @@ export function NewOrder({
             </div>
           </section>
           {form && (
-            <ReviewForm form={form} set={set} areas={areas} rates={rates} products={products} riders={riders} saving={saving} onSave={() => doSave()} onDiscard={() => { setForm(null); pasteRef.current?.focus(); }} />
+            <ReviewForm form={form} set={set} areas={areas} rates={rates} products={products} riders={riders} stations={stations ? activeStations : null} pickupFor={pickupFor} saving={saving} onSave={() => doSave()} onDiscard={() => { setForm(null); pasteRef.current?.focus(); }} />
           )}
         </div>
         <aside className="panel recent" aria-labelledby="todayH">
@@ -367,6 +383,8 @@ function ReviewForm({
   rates,
   products,
   riders,
+  stations,
+  pickupFor,
   saving,
   onSave,
   onDiscard,
@@ -377,6 +395,9 @@ function ReviewForm({
   rates: Record<string, number>;
   products: Product[];
   riders: Rider[];
+  /** Active stations; null hides the field (before migration 005). */
+  stations: Station[] | null;
+  pickupFor: (stationId: string) => string;
   saving: boolean;
   onSave: () => void;
   onDiscard: () => void;
@@ -584,6 +605,26 @@ function ReviewForm({
               <option>No</option>
             </select>
           </Field>
+          {stations && (
+            <Field k="station_id" label="Stock from station" form={form}>
+              <select
+                className="input"
+                id="f-station_id"
+                value={form.station_id}
+                onChange={(e) => {
+                  set("station_id", e.target.value);
+                  set("pickup_station", pickupFor(e.target.value));
+                }}
+              >
+                <option value="">None (merchant’s own address)</option>
+                {stations.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field k="pickup_station" label="Pickup station" form={form}>
             <input className="input" id="f-pickup_station" value={form.pickup_station} onChange={(e) => set("pickup_station", e.target.value)} />
           </Field>

@@ -1,7 +1,9 @@
 import { requireAdmin } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { mailConfigured } from "@/lib/mail";
+import { sheetsConfig } from "@/lib/google-sheets";
 import { Team, type Member } from "./team";
+import { BackupPanel, type BackupRun } from "./backup-panel";
 
 export const metadata = { title: "Team and access · Meld Ops" };
 
@@ -27,5 +29,22 @@ export default async function TeamPage() {
     status: confirmed.has(p.id) ? "active" : "invited",
   }));
 
-  return <Team members={members} merchants={merchants} selfId={profile.id} canEmail={mailConfigured()} />;
+  // Before migration 005 there is no backup_runs table; the panel then shows no history.
+  const [{ data: last }, { data: lastOk }] = await Promise.all([
+    supabase.from("backup_runs").select("ran_at,ok,rows,error").order("ran_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("backup_runs").select("ran_at,ok,rows,error").eq("ok", true).order("ran_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const cfg = sheetsConfig();
+
+  return (
+    <>
+      <Team members={members} merchants={merchants} selfId={profile.id} canEmail={mailConfigured()} />
+      <BackupPanel
+        configured={Boolean(cfg)}
+        last={(last as BackupRun | null) ?? null}
+        lastOk={(lastOk as BackupRun | null) ?? null}
+        sheetUrl={cfg ? `https://docs.google.com/spreadsheets/d/${cfg.sheetId}/edit` : null}
+      />
+    </>
+  );
 }

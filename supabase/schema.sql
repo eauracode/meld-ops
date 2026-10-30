@@ -115,6 +115,7 @@ create index orders_merchant_date on public.orders (merchant_id, delivery_date);
 create index orders_status_date on public.orders (status, delivery_date);
 
 -- Delivered orders take their quantity out of the product's stock; moving off Delivered puts it back.
+-- Replaced by migrations/005_stations_and_backup.sql (stock per station); run that after this file.
 create function public.orders_stock() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin

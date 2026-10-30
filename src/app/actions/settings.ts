@@ -47,15 +47,35 @@ export async function saveMerchant(id: string, v: { name: string; phone: string;
 }
 
 // ---------- products ----------
-export async function upsertProduct(p: { id?: string; merchant_id: string; name: string; price: number | string; stock: number | string }): Promise<Result & { id?: string }> {
+/**
+ * Saves a product's name and price. Stock only changes through stock actions (logged, per station);
+ * a new product's opening stock goes into `stationId` (the merchant's default station).
+ */
+export async function upsertProduct(p: {
+  id?: string;
+  merchant_id: string;
+  name: string;
+  price: number | string;
+  stock?: number | string;
+  stationId?: string | null;
+}): Promise<Result & { id?: string }> {
   const s = await actionSession({ admin: true });
-  const row = { merchant_id: p.merchant_id, name: p.name.trim(), price: Math.max(0, Math.round(toNum(p.price))), stock: Math.round(toNum(p.stock)) };
+  const row = { merchant_id: p.merchant_id, name: p.name.trim(), price: Math.max(0, Math.round(toNum(p.price))) };
   if (!row.name) return { ok: false, error: "Enter a product name." };
   const q = p.id
     ? s.supabase.from("products").update(row).eq("id", p.id).select("id").single()
     : s.supabase.from("products").insert(row).select("id").single();
   const { data, error } = await q;
   if (error) return { ok: false, error: error.code === "23505" ? `${row.name} is already a product.` : error.message };
+
+  const opening = Math.round(toNum(p.stock));
+  if (!p.id && opening > 0) {
+    const { error: sErr } = p.stationId
+      ? await s.supabase.rpc("stock_add", { p_product: data.id, p_station: p.stationId, p_qty: opening, p_note: "Opening stock" })
+      : { error: { message: "no station" } };
+    // Before migration 005 (no stations) the count lives on the product itself.
+    if (sErr) await s.supabase.from("products").update({ stock: opening }).eq("id", data.id);
+  }
   revalidatePath("/merchants");
   return { ok: true, id: data.id };
 }

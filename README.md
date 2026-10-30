@@ -15,7 +15,8 @@ All of these live in `src/lib/calc.ts` and are covered by tests (`npm test`).
 | Expected remittance = money received − delivery fees − waybill charges − failed fees − other deductions | `remitSummary()` |
 | Failed or returned lines are charged 50% of the amount charged | `FAILED_FEE_SHARE` |
 | Line type: failed/returned status → Failed; “waybill” in the customer name → Waybill | `autoLineType()` |
-| Delivered orders take their quantity out of the product’s stock | SQL trigger `orders_stock` |
+| Delivered orders take their quantity out of the stock at the order’s station (none = no stock change); moving off Delivered puts it back | SQL trigger `orders_stock` (migration 005) |
+| Stock is held per station; `products.stock` is the total, kept in step by a trigger. Add, move and count go through `stock_add`, `stock_move`, `stock_set`, and every change is logged in `stock_moves` | migration 005, `src/app/actions/stock.ts` |
 | Remittances show the merchant’s stock remaining (live while a draft, saved when sent or paid); hidden for merchants with no stock held | `stockRemaining()`, `remittances.stock_snapshot` |
 
 If you change the markup, change both `markup()` and `meld_charged()`.
@@ -23,6 +24,18 @@ If you change the markup, change both `markup()` and `meld_charged()`.
 An order’s amount charged can be changed by hand (for a discount or special price) by editing **Amount charged** on its remittance line. That sets `orders.charge_override`, which replaces the markup for that order everywhere (dashboard, delivery report). The report tags those charges “edited”.
 
 **Rider pay** lists each rider’s delivered orders for a date range. Admins can change the rider pay on unpaid orders; the merchant’s charge stays the same (pinned as a manual charge), so only revenue moves. **Mark paid** records one payment (`rider_payouts`) covering every unpaid delivered order for that rider in the range and locks their pay; **Undo** reverses it.
+
+## Nightly backup to Google Sheets
+
+Every night (Vercel Cron, `vercel.json`, 23:00 UTC = midnight Lagos) `/api/backup` rewrites one Google Sheet with every table: Orders, Remittances, Remittance lines, Merchants, Stock, Stock log, Riders, Rider payments, Rate cards, Stations, plus an About tab with the time and row counts. Download it any time from Google Sheets (File → Download → Microsoft Excel). Admins see the last run and a **Back up now** button under **Team and access**; the Overview warns if no backup has succeeded since the day before yesterday. Runs are logged in `backup_runs`.
+
+Setup, once:
+
+1. In [Google Cloud console](https://console.cloud.google.com/), create a project, enable the **Google Sheets API**, then under **IAM & Admin → Service accounts** create a service account and add a **JSON key**.
+2. Create an empty Google Sheet and **Share** it with the service account’s email as **Editor**.
+3. Add to Vercel (and `.env.local`): `GOOGLE_SA_EMAIL` (`client_email` from the JSON), `GOOGLE_SA_KEY` (`private_key`), `BACKUP_SHEET_ID` (the long id in the sheet’s URL) and `CRON_SECRET` (any long random string). Redeploy.
+
+It is a readable copy that could rebuild the records by hand, not a one-click restore.
 
 ## First-time setup
 
