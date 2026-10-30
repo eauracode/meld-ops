@@ -13,6 +13,9 @@ export const STATUSES = [
 ] as const;
 export type OrderStatus = (typeof STATUSES)[number];
 
+/** Not finished yet: an order still in one of these after its delivery date needs attention. */
+export const ATTENTION_STATUSES = ["Pending", "Out for delivery", "Rescheduled"] as const satisfies readonly OrderStatus[];
+
 export const PAYMENTS = ["Cash on delivery", "Already paid"] as const;
 export type Payment = (typeof PAYMENTS)[number];
 

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  ATTENTION_STATUSES,
+  STATUSES,
   addDays,
   autoLineType,
   charged,
@@ -223,5 +225,14 @@ describe("dates and money", () => {
   it("uses Lagos time for today", () => {
     // 23:30 UTC is already the next day in Lagos (UTC+1).
     expect(lagosToday(new Date("2026-10-27T23:30:00Z"))).toBe("2026-10-28");
+  });
+});
+
+describe("needs attention", () => {
+  it("covers only unfinished statuses", () => {
+    expect(ATTENTION_STATUSES.every((s) => (STATUSES as readonly string[]).includes(s))).toBe(true);
+    expect(ATTENTION_STATUSES).not.toContain("Delivered");
+    expect(ATTENTION_STATUSES).not.toContain("Failed");
+    expect(ATTENTION_STATUSES).not.toContain("Returned");
   });
 });

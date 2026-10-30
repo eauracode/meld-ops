@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getSession } from "@/lib/session";
-import { STATUSES, dmy, lagosToday } from "@/lib/calc";
+import { ATTENTION_STATUSES, STATUSES, dmy, lagosToday } from "@/lib/calc";
 import { NoMerchant } from "@/components/no-merchant";
 import { OrdersTable } from "./orders-table";
 import { OrderFilters } from "./order-filters";
@@ -9,9 +9,10 @@ import type { Order, Rider } from "@/lib/types";
 export const metadata = { title: "Orders · Meld Ops" };
 
 type Search = { date?: string; status?: string; rider?: string; q?: string };
+const COLUMNS = "id,merchant_id,delivery_date,customer,phone,address,area,product,qty,order_value,rider_fee,amount_charged,status,rider_id,created_at";
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<Search> }) {
-  const { supabase, merchant, profile } = await getSession();
+  const { supabase, merchant, merchants, profile } = await getSession();
   if (!merchant) return <NoMerchant title="Orders" admin={profile.role === "admin"} />;
 
   const sp = await searchParams;
@@ -24,7 +25,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   let query = supabase
     .from("orders")
-    .select("id,merchant_id,delivery_date,customer,phone,address,area,product,qty,order_value,rider_fee,amount_charged,status,rider_id,created_at")
+    .select(COLUMNS)
     .eq("merchant_id", merchant.id)
     .order("created_at", { ascending: false })
     .limit(500);
@@ -40,8 +41,28 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
     if (term) query = query.or(ors.join(","));
   }
 
-  const [{ data: orders }, { data: riders }] = await Promise.all([query, supabase.from("riders").select("id,name,phone,active").order("name")]);
+  // Earlier orders not finished yet, across every merchant this person works on.
+  const overdue = supabase
+    .from("orders")
+    .select(COLUMNS)
+    .in(
+      "merchant_id",
+      merchants.map((m) => m.id),
+    )
+    .in("status", ATTENTION_STATUSES)
+    .lt("delivery_date", lagosToday())
+    .order("delivery_date")
+    .order("id")
+    .limit(200);
+
+  const [{ data: orders }, { data: riders }, { data: late }] = await Promise.all([
+    query,
+    supabase.from("riders").select("id,name,phone,active").order("name"),
+    overdue,
+  ]);
   const list = (orders ?? []) as Order[];
+  const attention = (late ?? []) as Order[];
+  const merchantNames = Object.fromEntries(merchants.map((m) => [m.id, m.name]));
 
   const what = [f.date && `on ${dmy(f.date)}`, f.status && `with status ${f.status}`].filter(Boolean).join(" ");
 
@@ -57,6 +78,17 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           New order
         </Link>
       </div>
+      {attention.length > 0 && (
+        <section className="panel attention" style={{ marginBottom: 20 }} aria-labelledby="attn-h">
+          <div className="panel-h">
+            <h2 id="attn-h">Needs attention · {attention.length}</h2>
+            <p className="small muted" style={{ flexBasis: "100%" }}>
+              Earlier orders not yet delivered, failed or returned. Update the status or move them to today.
+            </p>
+          </div>
+          <OrdersTable orders={attention} riders={(riders ?? []) as Rider[]} merchantNames={merchantNames} attention />
+        </section>
+      )}
       <OrderFilters filters={f} riders={(riders ?? []) as Rider[]} />
       <section className="panel">
         {list.length ? (

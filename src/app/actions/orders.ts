@@ -122,18 +122,23 @@ export async function deleteOrder(id: number): Promise<{ ok: boolean; error?: st
 
 export async function updateOrder(
   id: number,
-  patch: { status?: string; rider_id?: string | null },
+  patch: { status?: string; rider_id?: string | null; delivery_date?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   const s = await actionSession();
-  const update: { status?: OrderStatus; rider_id?: string | null } = {};
+  const update: { status?: OrderStatus; rider_id?: string | null; delivery_date?: string } = {};
   if (patch.status !== undefined) {
     if (!(STATUSES as readonly string[]).includes(patch.status)) return { ok: false, error: "Unknown status." };
     update.status = patch.status as OrderStatus;
   }
   if (patch.rider_id !== undefined) update.rider_id = patch.rider_id || null;
+  if (patch.delivery_date !== undefined) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(patch.delivery_date)) return { ok: false, error: "Pick a date." };
+    update.delivery_date = patch.delivery_date;
+  }
   const { error } = await s.supabase.from("orders").update(update).eq("id", id);
   revalidatePath("/orders");
   revalidatePath("/new");
   revalidatePath("/report");
+  revalidatePath("/dashboard");
   return error ? { ok: false, error: error.message } : { ok: true };
 }

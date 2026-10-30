@@ -44,6 +44,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .muted { color: var(--muted); }
 .small { font-size: 0.875rem; }
+.rowtoggle { display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: inherit; color: inherit; text-align: left; cursor: pointer; }
+.rowtoggle .chev { display: none; }
+@media (min-width: 861px) { .rowtoggle { cursor: default; pointer-events: none; } }
+@media (prefers-reduced-motion: reduce) { .rowtoggle .chev { transition: none; } }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .hidden { display: none !important; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -292,10 +296,14 @@ dialog::backdrop { background: rgb(12 20 16 / 0.55); }
   .top .spacer, .rolechip { display: none; }
   .toasts { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   .hide-desk { display: inline-flex; }
-  main { padding: 18px 16px 110px; }
+  /* The screen is the frame: content scrolls inside it and the nav sits under it, so iOS Safari's
+     collapsing toolbar can't drag a fixed bar up the page. */
+  .app { height: 100vh; height: 100dvh; min-height: 0; grid-template-rows: minmax(0, 1fr) auto; }
+  .mainwrap { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  main { padding: 18px 16px 32px; }
   h1 { font-size: 1.45rem; }
   .order-layout, .grid2 { grid-template-columns: 1fr; }
-  .bottom { display: grid; grid-template-columns: repeat(var(--n, 5), 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; background: var(--side-bg); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .bottom { display: grid; grid-template-columns: repeat(var(--n, 5), 1fr); z-index: 25; background: var(--side-bg); padding-bottom: env(safe-area-inset-bottom, 0px); }
   .bottom a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 58px; color: var(--side-muted); text-decoration: none; font-size: 0.72rem; }
   .bottom a svg { width: 22px; height: 22px; }
   .bottom a[aria-current="page"] { color: var(--lime); }
@@ -316,6 +324,16 @@ dialog::backdrop { background: rgb(12 20 16 / 0.55); }
   table.cards td.first { font-weight: 700; font-size: 1rem; text-align: left; }
   table.cards td.first::before { display: none; }
   table.cards td .input { max-width: 60%; }
+  /* order cards: collapsed to customer + status; the name opens the rest */
+  table.cards.collapsible tr { display: flex; flex-direction: column; }
+  table.cards.collapsible td { order: 2; }
+  table.cards.collapsible td.first { order: 0; }
+  table.cards.collapsible td.keep { order: 1; }
+  table.cards.collapsible tr:not(.open) td:not(.first):not(.keep) { display: none; }
+  table.cards.collapsible td.first > span { width: 100%; }
+  .rowtoggle { width: 100%; min-height: 44px; justify-content: space-between; }
+  .rowtoggle .chev { display: block; width: 22px; height: 22px; flex: none; color: var(--muted); transition: transform 0.15s; }
+  tr.open .rowtoggle .chev { transform: rotate(180deg); }
   .sendrow { grid-template-columns: 1fr; }
 }
 @media print { .side, .top, .bottom, .toasts { display: none !important; } .app { display: block; } }
