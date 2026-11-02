@@ -7,7 +7,7 @@ import { StatusPill } from "@/components/status-pill";
 import { useFeedback } from "@/components/feedback";
 import { STATUSES, charged, dmy, isValidPhone, markup, naira, normalisePhone, toNum } from "@/lib/calc";
 import type { Draft } from "@/lib/extract";
-import type { Merchant, Order, Product, Rider, Station } from "@/lib/types";
+import { riderLabel, type Merchant, type Order, type Product, type Rider, type Station } from "@/lib/types";
 import { deleteOrder, extract, saveOrder, type OrderInput } from "@/app/actions/orders";
 
 type Form = Omit<Draft, "order_value" | "rider_fee"> & {
@@ -589,7 +589,7 @@ function ReviewForm({
               <option value="">Assign later</option>
               {riders.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.name}
+                  {riderLabel(r)}
                 </option>
               ))}
             </select>

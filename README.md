@@ -11,7 +11,7 @@ All of these live in `src/lib/calc.ts` and are covered by tests (`npm test`).
 | Rule | Where |
 | --- | --- |
 | Markup on the rider fee: under ₦3,000 adds ₦2,000; ₦3,000 to ₦4,999 adds ₦1,500; ₦5,000 and over adds ₦1,000 | `markup()`, mirrored in SQL as `meld_charged()` for `orders.amount_charged` |
-| Revenue = amount charged − rider fee | `reportTotals()` |
+| Revenue = amount charged − rider pay owed (`orders.rider_cost`): the rider fee for partner riders, ₦0 for in-house (salaried) riders, whose salary, fuel and running costs are booked outside the app. Each order keeps whether its rider was in-house when assigned; only admins set a rider’s type. In-house deliveries never appear on Rider pay | `riderCost()`, `reportTotals()`, `dashboardStats()`, migration 006 |
 | Expected remittance = money received − delivery fees − waybill charges − failed fees − other deductions | `remitSummary()` |
 | Failed or returned lines are charged 50% of the amount charged | `FAILED_FEE_SHARE` |
 | Line type: failed/returned status → Failed; “waybill” in the customer name → Waybill | `autoLineType()` |

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Period } from "@/lib/calc";
-import type { Merchant, Rider } from "@/lib/types";
+import { riderLabel, type Merchant, type Rider } from "@/lib/types";
 
 const PERIODS: { id: Period; label: string }[] = [
   { id: "day", label: "Day" },
@@ -97,7 +97,7 @@ export function DashFilters({
           <option value="__none">Unassigned</option>
           {riders.map((r) => (
             <option key={r.id} value={r.id}>
-              {r.name}
+              {riderLabel(r)}
               {r.active ? "" : " (inactive)"}
             </option>
           ))}

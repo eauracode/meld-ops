@@ -57,7 +57,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
 
   const [{ data: orders }, { data: riders }, { data: late }] = await Promise.all([
     query,
-    supabase.from("riders").select("id,name,phone,active").order("name"),
+    supabase.from("riders").select("id,name,phone,active,kind").order("name"),
     overdue,
   ]);
   const list = (orders ?? []) as Order[];

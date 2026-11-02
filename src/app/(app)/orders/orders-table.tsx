@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { STATUSES, dmy, lagosToday, naira } from "@/lib/calc";
-import { orderCode, type Order, type Rider } from "@/lib/types";
+import { orderCode, riderLabel, type Order, type Rider } from "@/lib/types";
 import { useFeedback } from "@/components/feedback";
 import { updateOrder } from "@/app/actions/orders";
 
@@ -130,7 +130,7 @@ export function OrdersTable({
                     <option value="">Unassigned</option>
                     {active.map((r) => (
                       <option key={r.id} value={r.id}>
-                        {r.name}
+                        {riderLabel(r)}
                       </option>
                     ))}
                     {gone && <option value={gone.id}>{gone.name} (inactive)</option>}

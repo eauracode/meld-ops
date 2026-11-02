@@ -1,6 +1,6 @@
 // Turns database rows into the backup sheet's tabs: one header row, then plain values, with names
 // in place of ids. Pure, so it is tested without a database or Google.
-import { dmy, remitSummary, type LineType } from "./calc";
+import { dmy, remitSummary, riderCost, type LineType } from "./calc";
 import { orderCode } from "./types";
 
 type Rec = Record<string, unknown>;
@@ -51,7 +51,7 @@ export function buildTabs(d: BackupData, now: Date = new Date()): Tab[] {
   const orders: Tab = {
     name: "Orders",
     rows: [
-      ["Order", "Delivery date", "Merchant", "Customer", "Phone", "Address", "Area", "Station", "Pickup", "Product", "Qty", "Order value", "Rider fee", "Amount charged", "Revenue", "Payment", "Status", "Rider", "Rider paid", "Notes", "Created"],
+      ["Order", "Delivery date", "Merchant", "Customer", "Phone", "Address", "Area", "Station", "Pickup", "Product", "Qty", "Order value", "Rider fee", "Amount charged", "Rider pay owed", "Revenue", "Payment", "Status", "Rider", "Rider type", "Rider paid", "Notes", "Created"],
       ...[...d.orders]
         .sort((a, b) => n(a.id) - n(b.id))
         .map((o) => [
@@ -69,10 +69,12 @@ export function buildTabs(d: BackupData, now: Date = new Date()): Tab[] {
           n(o.order_value),
           n(o.rider_fee),
           n(o.amount_charged),
-          n(o.amount_charged) - n(o.rider_fee),
+          riderCost(o as { rider_fee: number; rider_cost?: number; inhouse?: boolean }),
+          n(o.amount_charged) - riderCost(o as { rider_fee: number; rider_cost?: number; inhouse?: boolean }),
           s(o.payment),
           s(o.status),
           rider(o.rider_id),
+          o.rider_id ? (o.inhouse ? "In-house" : "Partner") : "",
           o.rider_payout_id ? "Yes" : "",
           s(o.notes),
           lagosTime(o.created_at),
@@ -161,7 +163,7 @@ export function buildTabs(d: BackupData, now: Date = new Date()): Tab[] {
     ],
   };
 
-  const riders: Tab = { name: "Riders", rows: [["Rider", "Phone", "Active"], ...byId(d.riders, "name").map((r) => [s(r.name), s(r.phone), r.active ? "Yes" : "No"])] };
+  const riders: Tab = { name: "Riders", rows: [["Rider", "Phone", "Type", "Active"], ...byId(d.riders, "name").map((r) => [s(r.name), s(r.phone), r.kind === "inhouse" ? "In-house" : "Partner", r.active ? "Yes" : "No"])] };
 
   const riderPayments: Tab = {
     name: "Rider payments",

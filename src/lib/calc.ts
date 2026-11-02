@@ -119,16 +119,29 @@ export function remitSummary(lines: RemitLine[], otherDeductions: number): Remit
   return s;
 }
 
+/**
+ * Rider pay owed for one delivery: the rider fee for partner riders, 0 for in-house riders (salaried;
+ * their salary, fuel and bike costs are booked outside the app). `rider_cost` comes from the database
+ * (migration 006); without it, every rider counts as a partner.
+ */
+export function riderCost(o: { rider_fee: number; rider_cost?: number | null; inhouse?: boolean | null }): number {
+  if (o.rider_cost !== undefined && o.rider_cost !== null) return toNum(o.rider_cost);
+  return o.inhouse ? 0 : toNum(o.rider_fee);
+}
+
 export type ReportRow = {
   order_value: number;
   rider_fee: number;
+  rider_cost?: number | null;
+  inhouse?: boolean | null;
   amount_charged: number;
   rider_id: string | null;
   product: string;
   qty: number;
 };
 
-type Tally = { deliveries: number; orderValue: number; charged: number; riderFees: number; revenue: number };
+/** riderFees = partner rider pay owed; revenue = charged − that. inhouse/inhouseCharged: in-house deliveries and what they were charged. */
+type Tally = { deliveries: number; orderValue: number; charged: number; riderFees: number; revenue: number; inhouse: number; inhouseCharged: number };
 
 export type ReportTotals = Tally & {
   units: number;
@@ -137,13 +150,13 @@ export type ReportTotals = Tally & {
   byRider: Record<string, Tally>;
 };
 
-const emptyTally = (): Tally => ({ deliveries: 0, orderValue: 0, charged: 0, riderFees: 0, revenue: 0 });
+const emptyTally = (): Tally => ({ deliveries: 0, orderValue: 0, charged: 0, riderFees: 0, revenue: 0, inhouse: 0, inhouseCharged: 0 });
 
-/** Delivery report totals. Revenue = amount charged − rider fee, per delivery. */
+/** Delivery report totals. Revenue = amount charged − rider pay owed (0 for in-house riders), per delivery. */
 export function reportTotals(rows: ReportRow[]): ReportTotals {
   const t: ReportTotals = { ...emptyTally(), units: 0, byProduct: {}, byRider: {} };
   for (const r of rows) {
-    const fee = toNum(r.rider_fee);
+    const fee = riderCost(r);
     const ch = toNum(r.amount_charged);
     const value = toNum(r.order_value);
     const qty = toNum(r.qty);
@@ -153,6 +166,10 @@ export function reportTotals(rows: ReportRow[]): ReportTotals {
       tally.charged += ch;
       tally.riderFees += fee;
       tally.revenue += ch - fee;
+      if (r.inhouse) {
+        tally.inhouse += 1;
+        tally.inhouseCharged += ch;
+      }
     }
     t.units += qty;
     const p = r.product || "Unknown";
@@ -200,6 +217,8 @@ export type DashOrder = {
   status: string;
   order_value: number;
   rider_fee: number;
+  rider_cost?: number | null;
+  inhouse?: boolean | null;
   amount_charged: number;
   payment: string;
   area: string;
@@ -211,8 +230,12 @@ export type DashTally = {
   failed: number;
   orderValue: number;
   charged: number;
+  /** Partner rider pay owed (in-house riders count 0). */
   riderFees: number;
   revenue: number;
+  /** Delivered by in-house riders, and what those deliveries were charged. */
+  inhouse: number;
+  inhouseCharged: number;
 };
 
 export type DashStats = DashTally & {
@@ -229,7 +252,7 @@ export type DashStats = DashTally & {
 };
 
 const isFailed = (s: string) => s === "Failed" || s === "Returned";
-const blankTally = (): DashTally => ({ orders: 0, delivered: 0, failed: 0, orderValue: 0, charged: 0, riderFees: 0, revenue: 0 });
+const blankTally = (): DashTally => ({ orders: 0, delivered: 0, failed: 0, orderValue: 0, charged: 0, riderFees: 0, revenue: 0, inhouse: 0, inhouseCharged: 0 });
 
 /** Every bucket key from `from` to `to`: each day, or each month (YYYY-MM). */
 export function trendKeys(from: string, to: string, grain: Grain): string[] {
@@ -241,7 +264,7 @@ export function trendKeys(from: string, to: string, grain: Grain): string[] {
 
 /**
  * Overview figures for a set of orders. Money (order value, charges, revenue) counts Delivered only;
- * cash collected is Delivered and cash on delivery. Revenue = amount charged − rider fee.
+ * cash collected is Delivered and cash on delivery. Revenue = amount charged − rider pay owed (riderCost).
  */
 export function dashboardStats(orders: DashOrder[], from: string, to: string, grain: Grain): DashStats {
   const s: DashStats = { ...blankTally(), open: 0, cashCollected: 0, successRate: null, byStatus: {}, byMerchant: {}, byRider: {}, byArea: [], trend: [] };
@@ -262,8 +285,12 @@ export function dashboardStats(orders: DashOrder[], from: string, to: string, gr
         t.delivered += 1;
         t.orderValue += toNum(o.order_value);
         t.charged += toNum(o.amount_charged);
-        t.riderFees += toNum(o.rider_fee);
-        t.revenue += toNum(o.amount_charged) - toNum(o.rider_fee);
+        t.riderFees += riderCost(o);
+        t.revenue += toNum(o.amount_charged) - riderCost(o);
+        if (o.inhouse) {
+          t.inhouse += 1;
+          t.inhouseCharged += toNum(o.amount_charged);
+        }
       }
     }
 

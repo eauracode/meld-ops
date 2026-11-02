@@ -21,7 +21,9 @@ export type Merchant = {
 
 export type Product = { id: string; merchant_id: string; name: string; price: number; stock: number };
 export type Rate = { merchant_id: string; area: string; rider_fee: number };
-export type Rider = { id: string; name: string; phone: string; active: boolean };
+/** partner: paid the rider fee per delivery. inhouse: salaried; Meld keeps the whole charge. */
+export type RiderKind = "partner" | "inhouse";
+export type Rider = { id: string; name: string; phone: string; active: boolean; kind?: RiderKind };
 export type Station = { id: string; name: string; address: string; active: boolean };
 export type StationStock = { product_id: string; station_id: string; qty: number };
 export type StockKind = "added" | "moved" | "delivered" | "undelivered" | "corrected";
@@ -51,6 +53,9 @@ export type Order = {
   order_value: number;
   rider_fee: number;
   amount_charged: number;
+  /** Rider pay owed: rider fee for partners, 0 when the rider was in-house when assigned (migration 006). */
+  rider_cost?: number;
+  inhouse?: boolean;
   payment: Payment;
   notes: string;
   rider_id: string | null;
@@ -85,5 +90,7 @@ export type RemittanceLine = {
 };
 
 export const orderCode = (id: number) => `MLD-${id}`;
+
+export const riderLabel = (r: Pick<Rider, "name" | "kind">) => (r.kind === "inhouse" ? `${r.name} · in-house` : r.name);
 
 export const roleLabel = (r: Role) => (r === "admin" ? "Admin / finance" : "Ops / dispatcher");

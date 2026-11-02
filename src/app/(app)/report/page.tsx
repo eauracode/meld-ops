@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
-import { charged, dmy, lagosToday, naira, reportTotals } from "@/lib/calc";
+import { charged, dmy, lagosToday, naira, reportTotals, riderCost } from "@/lib/calc";
 import { NoMerchant } from "@/components/no-merchant";
 import { fetchAll } from "@/lib/fetch-all";
 import { ReportFilters } from "./report-filters";
@@ -29,7 +29,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
   const page = (a: number, b: number) => {
     let q = supabase
       .from("orders")
-      .select("id,merchant_id,delivery_date,customer,address,area,pickup_station,product,qty,order_value,rider_fee,amount_charged,rider_id,notes")
+      .select("id,merchant_id,delivery_date,customer,address,area,pickup_station,product,qty,order_value,rider_fee,rider_cost,inhouse,amount_charged,rider_id,notes")
       .eq("status", "Delivered")
       .gte("delivery_date", from)
       .lte("delivery_date", to)
@@ -42,7 +42,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
 
   const [rows, { data: riderRows }] = await Promise.all([
     fetchAll<Order>(page),
-    supabase.from("riders").select("id,name,phone,active").order("name"),
+    supabase.from("riders").select("id,name,phone,active,kind").order("name"),
   ]);
   const riders = (riderRows ?? []) as Rider[];
   const riderName = (id: string | null) => riders.find((r) => r.id === id)?.name ?? "";
@@ -59,8 +59,10 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
     "Order value": o.order_value,
     "Rider fee": o.rider_fee,
     "Amount charged": o.amount_charged,
-    Revenue: o.amount_charged - o.rider_fee,
+    "Rider pay owed": riderCost(o),
+    Revenue: o.amount_charged - riderCost(o),
     Rider: riderName(o.rider_id),
+    "Rider type": o.rider_id ? (o.inhouse ? "In-house" : "Partner") : "",
     Product: o.product,
     Qty: o.qty,
     Comment: o.notes,
@@ -99,7 +101,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
           <b>{naira(t.charged)}</b>
         </div>
         <div>
-          <span>Rider fees</span>
+          <span>Partner rider fees</span>
           <b>{naira(t.riderFees)}</b>
         </div>
         <div className="rev">
@@ -107,6 +109,11 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
           <b>{naira(t.revenue)}</b>
         </div>
       </div>
+      {t.inhouse > 0 && (
+        <p className="small muted" style={{ margin: "-6px 0 14px" }}>
+          Revenue includes {naira(t.inhouseCharged)} from {t.inhouse} in-house deliver{t.inhouse === 1 ? "y" : "ies"}, before salary, fuel and running costs (recorded in the books).
+        </p>
+      )}
       <section className="panel">
         {!rows.length ? (
           <div className="empty">
@@ -146,7 +153,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
                         {naira(r.orderValue)}
                       </td>
                       <td data-l="Rider fees owed" className="num">
-                        <b>{naira(r.riderFees)}</b>
+                        {r.inhouse === r.deliveries && r.deliveries > 0 ? <span className="muted">Salaried</span> : <b>{naira(r.riderFees)}</b>}
                       </td>
                       <td data-l="Revenue" className="num">
                         {naira(r.revenue)}
@@ -207,7 +214,12 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
                       )}
                     </td>
                     <td data-l="Revenue" className="num">
-                      {naira(o.amount_charged - o.rider_fee)}
+                      {naira(o.amount_charged - riderCost(o))}
+                      {o.inhouse && (
+                        <span className="tag" title="In-house rider: Meld keeps the whole charge (salary and running costs are in the books)">
+                          in-house
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

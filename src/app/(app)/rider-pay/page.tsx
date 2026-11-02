@@ -31,7 +31,7 @@ export default async function RiderPayPage({ searchParams }: { searchParams: Pro
   const riderId = sp.rider ?? "";
   const show = sp.show === "paid" || sp.show === "all" ? sp.show : "unpaid";
 
-  const { data: riderRows } = await supabase.from("riders").select("id,name,phone,active").order("name");
+  const { data: riderRows } = await supabase.from("riders").select("id,name,phone,active,kind").order("name");
   const riders = (riderRows ?? []) as Rider[];
 
   let rows: Row[];
@@ -43,6 +43,7 @@ export default async function RiderPayPage({ searchParams }: { searchParams: Pro
           .from("orders")
           .select("id,delivery_date,merchant_id,customer,area,address,rider_id,rider_fee,rider_payout_id")
           .eq("status", "Delivered")
+          .eq("inhouse", false) // in-house riders are salaried
           .not("rider_id", "is", null)
           .gte("delivery_date", from)
           .lte("delivery_date", to)

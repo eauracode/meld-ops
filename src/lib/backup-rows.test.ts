@@ -74,6 +74,19 @@ describe("backup tabs", () => {
     expect(col("Created")).toBe("29/10/2026 11:47");
   });
 
+  it("keeps the whole charge on in-house orders", () => {
+    const t = buildTabs({
+      ...data,
+      riders: [{ id: "r2", name: "Tunde", phone: "", active: true, kind: "inhouse" }],
+      orders: [{ ...data.orders[0], rider_id: "r2", inhouse: true, rider_cost: 0 }],
+    }).find((x) => x.name === "Orders")!;
+    const h = t.rows[0];
+    const col = (name: string) => t.rows[1][h.indexOf(name)];
+    expect(col("Rider pay owed")).toBe(0);
+    expect(col("Revenue")).toBe(5500);
+    expect(col("Rider type")).toBe("In-house");
+  });
+
   it("totals remittances with the remittance rules", () => {
     const row = tab("Remittances").rows[1];
     // received 23,500 − delivery 5,500 − failed 3,000 (50% of 6,000) − other 500

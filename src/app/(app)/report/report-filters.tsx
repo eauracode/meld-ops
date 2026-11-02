@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { Merchant, Rider } from "@/lib/types";
+import { riderLabel, type Merchant, type Rider } from "@/lib/types";
 
 type F = { from: string; to: string; merchant: string; rider: string; view: string };
 
@@ -48,7 +48,7 @@ export function ReportFilters({ merchants, riders, ...f }: F & { merchants: Merc
           <option value="">All riders</option>
           {riders.map((r) => (
             <option key={r.id} value={r.id}>
-              {r.name}
+              {riderLabel(r)}
             </option>
           ))}
         </select>

@@ -16,7 +16,7 @@ import {
   type Grain,
   type Period,
 } from "@/lib/calc";
-import type { RemittanceLine, Rider } from "@/lib/types";
+import { riderLabel, type RemittanceLine, type Rider } from "@/lib/types";
 import { sheetsConfig } from "@/lib/google-sheets";
 import { DashFilters } from "./dash-filters";
 import { TrendChart } from "./trend-chart";
@@ -74,7 +74,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     fetchAll<DashOrder>((x, y) => {
       let q = supabase
         .from("orders")
-        .select("delivery_date,merchant_id,rider_id,status,order_value,rider_fee,amount_charged,payment,area")
+        .select("delivery_date,merchant_id,rider_id,status,order_value,rider_fee,rider_cost,inhouse,amount_charged,payment,area")
         .gte("delivery_date", a)
         .lte("delivery_date", b)
         .order("id");
@@ -93,7 +93,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const [orders, prevOrders, { data: riderRows }, { data: owedRows }] = await Promise.all([
     ordersIn(from, to),
     ordersIn(prev.from, prev.to),
-    supabase.from("riders").select("id,name,phone,active").order("name"),
+    supabase.from("riders").select("id,name,phone,active,kind").order("name"),
     unpaid,
   ]);
 
@@ -102,7 +102,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const riders = (riderRows ?? []) as Rider[];
   const owed = (owedRows ?? []).map((r) => remitSummary((r.remittance_lines ?? []) as RemittanceLine[], r.other_deductions).expected);
   const owedTotal = owed.reduce((a, b) => a + b, 0);
-  const riderName = (id: string) => (id ? (riders.find((r) => r.id === id)?.name ?? "Removed rider") : "Unassigned");
+  const riderName = (id: string) => {
+    const r = id ? riders.find((x) => x.id === id) : null;
+    return id ? (r ? riderLabel(r) : "Removed rider") : "Unassigned";
+  };
   const merchantName = (id: string) => merchants.find((m) => m.id === id)?.name ?? "Removed merchant";
   const activeMerchants = Object.keys(s.byMerchant).length;
   const activeRiders = Object.keys(s.byRider).filter((id) => id && s.byRider[id].orders > 0).length;
@@ -187,6 +190,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <span>Revenue</span>
           <b>{naira(s.revenue)}</b>
           <Delta now={s.revenue} before={p.revenue} period={period} />
+          {s.inhouse > 0 && (
+            <span className="delta">
+              Includes {naira(s.inhouseCharged)} from {s.inhouse} in-house deliver{s.inhouse === 1 ? "y" : "ies"}, before salary and running costs
+            </span>
+          )}
         </div>
 
         <div className="kpi">
@@ -205,7 +213,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <span className="delta">{naira(s.orderValue - s.cashCollected)} was already paid</span>
         </div>
         <div className="kpi">
-          <span>Rider fees</span>
+          <span>Partner rider fees</span>
           <b>{naira(s.riderFees)}</b>
           <span className="delta">Charged to merchants {naira(s.charged)}</span>
         </div>
@@ -282,7 +290,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         {pct(rate(t))}
                       </td>
                       <td className="num" data-l="Fees owed">
-                        {naira(t.riderFees)}
+                        {t.inhouse > 0 && t.inhouse === t.delivered ? <span className="muted">Salaried</span> : naira(t.riderFees)}
                       </td>
                     </tr>
                   ))}
@@ -394,7 +402,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
 
       <p className="small muted" style={{ marginTop: 14 }}>
-        {dmy(from)} to {dmy(to)}. Money figures count delivered orders only. Revenue is the amount charged to merchants minus rider fees.{" "}
+        {dmy(from)} to {dmy(to)}. Money figures count delivered orders only. Revenue is the amount charged to merchants minus partner rider fees; in-house deliveries keep the whole charge (their salary, fuel and running costs are in the books).{" "}
         <Link href={`/report?from=${from}&to=${to}${merchantId ? `&merchant=${merchantId}` : "&merchant=__all"}`}>Open the delivery report</Link> for
         every order.
       </p>

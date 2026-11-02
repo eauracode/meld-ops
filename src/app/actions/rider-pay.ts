@@ -24,10 +24,11 @@ export async function setRiderFee(orderId: number, fee: number | string): Promis
 
   const { data: o, error: rErr } = await s.supabase
     .from("orders")
-    .select("rider_fee,amount_charged,charge_override,rider_payout_id")
+    .select("rider_fee,amount_charged,charge_override,rider_payout_id,inhouse")
     .eq("id", orderId)
     .single();
   if (rErr || !o) return { ok: false, error: rErr?.message ?? "Order not found." };
+  if (o.inhouse) return { ok: false, error: "In-house riders are salaried; there’s no per-delivery pay to edit." };
   if (o.rider_payout_id) return { ok: false, error: "This rider has already been paid for this order. Undo the payment first." };
   if (o.rider_fee === rider_fee) return { ok: true };
 
@@ -48,6 +49,7 @@ export async function payRider(riderId: string, from: string, to: string): Promi
     .select("id,rider_fee")
     .eq("rider_id", riderId)
     .eq("status", "Delivered")
+    .eq("inhouse", false) // in-house riders are salaried, never paid per delivery
     .is("rider_payout_id", null)
     .gte("delivery_date", from)
     .lte("delivery_date", to)

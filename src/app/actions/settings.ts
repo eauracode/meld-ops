@@ -6,7 +6,7 @@ import { isValidPhone, normalisePhone, toNum } from "@/lib/calc";
 import { MERCHANT_COOKIE, actionSession } from "@/lib/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { sendTempPassword, type MailResult } from "@/lib/mail";
-import type { Role } from "@/lib/types";
+import type { RiderKind, Role } from "@/lib/types";
 
 type Result = { ok: true } | { ok: false; error: string };
 const fail = (e: { message: string } | null): Result => (e ? { ok: false, error: e.message } : { ok: true });
@@ -105,12 +105,22 @@ export async function deleteRate(merchantId: string, area: string): Promise<Resu
 }
 
 // ---------- riders ----------
-export async function addRider(name: string, phone: string): Promise<Result> {
+export async function addRider(name: string, phone: string, kind: RiderKind = "partner"): Promise<Result> {
   const s = await actionSession();
   const p = normalisePhone(phone);
   if (!name.trim()) return { ok: false, error: "Enter the rider’s name." };
   if (!isValidPhone(p)) return { ok: false, error: "Use an 11-digit number starting 070, 080, 081, 090 or 091." };
-  const { error } = await s.supabase.from("riders").insert({ name: name.trim(), phone: p });
+  if (kind === "inhouse" && s.profile.role !== "admin") return { ok: false, error: "Only admins can add in-house riders." };
+  const { error } = await s.supabase.from("riders").insert({ name: name.trim(), phone: p, ...(kind === "inhouse" ? { kind } : {}) });
+  revalidatePath("/riders");
+  return fail(error);
+}
+
+/** Partner or in-house. Applies to orders assigned from now on; past orders keep their type. */
+export async function setRiderKind(id: string, kind: RiderKind): Promise<Result> {
+  const s = await actionSession({ admin: true });
+  if (kind !== "partner" && kind !== "inhouse") return { ok: false, error: "Unknown rider type." };
+  const { error } = await s.supabase.from("riders").update({ kind }).eq("id", id);
   revalidatePath("/riders");
   return fail(error);
 }

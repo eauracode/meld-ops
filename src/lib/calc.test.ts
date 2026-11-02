@@ -15,6 +15,7 @@ import {
   isValidPhone,
   remitSummary,
   reportTotals,
+  riderCost,
   stockRemaining,
   toNum,
   change,
@@ -193,8 +194,46 @@ describe("delivery report", () => {
     expect(t.revenue).toBe(1500 + 1500 + 2000);
     expect(t.units).toBe(6);
     expect(t.byProduct).toEqual({ Shea: 3, Soap: 3 });
-    expect(t.byRider.r1).toEqual({ deliveries: 1, orderValue: 17000, charged: 6000, riderFees: 4500, revenue: 1500 });
+    expect(t.byRider.r1).toEqual({ deliveries: 1, orderValue: 17000, charged: 6000, riderFees: 4500, revenue: 1500, inhouse: 0, inhouseCharged: 0 });
     expect(t.byRider[""].revenue).toBe(2000);
+  });
+
+  it("keeps the whole charge on in-house deliveries", () => {
+    const t = reportTotals([
+      { order_value: 23500, rider_fee: 4500, rider_cost: 4500, inhouse: false, amount_charged: 6000, rider_id: "partner", product: "P", qty: 1 },
+      { order_value: 23500, rider_fee: 4500, rider_cost: 0, inhouse: true, amount_charged: 6000, rider_id: "staff", product: "P", qty: 1 },
+    ]);
+    expect(t.riderFees).toBe(4500);
+    expect(t.revenue).toBe(1500 + 6000);
+    expect(t.inhouse).toBe(1);
+    expect(t.inhouseCharged).toBe(6000);
+    expect(t.byRider.staff).toMatchObject({ riderFees: 0, revenue: 6000 });
+  });
+});
+
+describe("rider cost", () => {
+  it("is the rider fee for partners and 0 for in-house riders", () => {
+    expect(riderCost({ rider_fee: 4500, rider_cost: 4500 })).toBe(4500);
+    expect(riderCost({ rider_fee: 4500, rider_cost: 0, inhouse: true })).toBe(0);
+    // Before migration 006 there is no rider_cost: everyone is a partner.
+    expect(riderCost({ rider_fee: 4500 })).toBe(4500);
+  });
+
+  it("counts in-house deliveries on the overview", () => {
+    const base = { delivery_date: "2026-11-02", merchant_id: "m1", status: "Delivered", order_value: 23500, rider_fee: 4500, amount_charged: 6000, payment: "Cash on delivery", area: "Lekki" };
+    const s = dashboardStats(
+      [
+        { ...base, rider_id: "p", rider_cost: 4500, inhouse: false },
+        { ...base, rider_id: "h", rider_cost: 0, inhouse: true },
+      ],
+      "2026-11-02",
+      "2026-11-02",
+      "day",
+    );
+    expect(s.riderFees).toBe(4500);
+    expect(s.revenue).toBe(7500);
+    expect(s.inhouse).toBe(1);
+    expect(s.inhouseCharged).toBe(6000);
   });
 });
 

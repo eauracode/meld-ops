@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { STATUSES } from "@/lib/calc";
-import type { Rider } from "@/lib/types";
+import { riderLabel, type Rider } from "@/lib/types";
 
 type F = { date: string; status: string; rider: string; q: string };
 
@@ -48,7 +48,7 @@ export function OrderFilters({ filters, riders }: { filters: F; riders: Rider[] 
           <option value="__none">Unassigned</option>
           {riders.map((r) => (
             <option key={r.id} value={r.id}>
-              {r.name}
+              {riderLabel(r)}
             </option>
           ))}
         </select>

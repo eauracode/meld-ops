@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useFeedback } from "@/components/feedback";
 import { dmy, naira, toNum } from "@/lib/calc";
 import { payRider, setRiderFee, undoPayout } from "@/app/actions/rider-pay";
-import type { Rider } from "@/lib/types";
+import { riderLabel, type Rider } from "@/lib/types";
 
 export type RiderTotal = { riderId: string; name: string; deliveries: number; total: number; paid: number; unpaid: number };
 export type PayRow = {
@@ -91,7 +91,7 @@ export function RiderPay({
       <div className="pagehead">
         <div>
           <h1>Rider pay</h1>
-          <p>What each rider is owed for delivered orders, {range}. Edit pay on unpaid orders; mark a rider paid to lock it.</p>
+          <p>What each rider is owed for delivered orders, {range}. Edit pay on unpaid orders; mark a rider paid to lock it. In-house riders are salaried and not listed.</p>
         </div>
       </div>
 
@@ -110,7 +110,7 @@ export function RiderPay({
             <option value="">All riders</option>
             {riders.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name}
+                {riderLabel(r)}
               </option>
             ))}
           </select>
