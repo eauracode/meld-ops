@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { PAYMENTS, STATUSES, isValidPhone, normalisePhone, toNum, type OrderStatus, type Payment } from "@/lib/calc";
 import { extractOrder, type ExtractResult } from "@/lib/extract";
 import { actionSession } from "@/lib/session";
+import { createAdminClient } from "@/lib/supabase/server";
 import { orderCode } from "@/lib/types";
 
 async function merchantData(merchantId: string) {
@@ -144,4 +145,34 @@ export async function updateOrder(
   revalidatePath("/report");
   revalidatePath("/dashboard");
   return error ? { ok: false, error: error.message } : { ok: true };
+}
+
+/**
+ * Changes how many units an order is for and its value (e.g. the customer took 1 of 2). Stock follows
+ * through the orders_stock trigger; a draft remittance line for the order is updated to match.
+ */
+export async function updateQuantity(id: number, qty: number | string, orderValue: number | string): Promise<{ ok: boolean; error?: string }> {
+  const s = await actionSession();
+  const q = Math.round(toNum(qty));
+  const value = Math.round(toNum(orderValue));
+  if (q < 1) return { ok: false, error: "Quantity must be at least 1. If the customer took nothing, mark the order Failed or Returned." };
+  if (value < 0) return { ok: false, error: "Order value can’t be negative." };
+
+  // Row-level security decides whether this person may change the order.
+  const { data, error } = await s.supabase.from("orders").update({ qty: q, order_value: value }).eq("id", id).select("id").maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Order not found." };
+
+  // Remittance lines are admin-only tables, so keep the order's draft line in step with the secret key.
+  const admin = createAdminClient();
+  const { data: lines } = await admin.from("remittance_lines").select("id,type,remittances(status)").eq("order_id", id);
+  const draft = (lines ?? []).filter((l) => l.type !== "Failed" && (l.remittances as unknown as { status: string } | null)?.status === "draft");
+  if (draft.length) await admin.from("remittance_lines").update({ qty: q, order_value: value }).in("id", draft.map((l) => l.id));
+
+  revalidatePath("/orders");
+  revalidatePath("/report");
+  revalidatePath("/dashboard");
+  revalidatePath("/remittance");
+  revalidatePath("/merchants");
+  return { ok: true };
 }
