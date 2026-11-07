@@ -22,6 +22,8 @@ const VIEWS: View[] = [
   { href: "/riders", label: "Riders", short: "Riders", icon: "rider" },
   { href: "/team", label: "Team and access", short: "Team", icon: "team", admin: true },
 ];
+// Pages that cover every merchant, so the merchant picker would only confuse.
+const ALL_MERCHANTS = ["/dashboard", "/riders", "/rider-pay", "/stations", "/team"];
 const MOBILE = ["/dashboard", "/new", "/orders", "/report", "/remittance"];
 
 type Theme = "system" | "light" | "dark";
@@ -127,33 +129,37 @@ export function Shell({
             <MeldMark size={28} />
             MELD
           </span>
-          <div className="switcher">
-            <label htmlFor="merchantSel">Merchant</label>
-            <select
-              id="merchantSel"
-              className="input"
-              value={merchantId ?? ""}
-              disabled={!merchants.length}
-              onChange={(e) => {
-                const id = e.target.value;
-                startTransition(async () => {
-                  try {
-                    await setMerchant(id);
-                    router.refresh();
-                  } catch (err) {
-                    toast(err instanceof Error ? err.message : "Couldn’t switch merchant.");
-                  }
-                });
-              }}
-            >
-              {!merchants.length && <option value="">No merchants yet</option>}
-              {merchants.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {ALL_MERCHANTS.some((p) => path === p || path.startsWith(p + "/")) ? (
+            <span style={{ flex: 1 }} />
+          ) : (
+            <div className="switcher">
+              <label htmlFor="merchantSel">Merchant</label>
+              <select
+                id="merchantSel"
+                className="input"
+                value={merchantId ?? ""}
+                disabled={!merchants.length}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  startTransition(async () => {
+                    try {
+                      await setMerchant(id);
+                      router.refresh();
+                    } catch (err) {
+                      toast(err instanceof Error ? err.message : "Couldn’t switch merchant.");
+                    }
+                  });
+                }}
+              >
+                {!merchants.length && <option value="">No merchants yet</option>}
+                {merchants.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <span className="spacer" />
           <span className="rolechip">
             {profile.name || profile.email}, {roleLabel(profile.role)}
