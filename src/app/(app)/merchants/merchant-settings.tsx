@@ -92,7 +92,15 @@ export function MerchantSettings({
     toast(r.ok ? (id ? `New orders now default to ${activeStations.find((s) => s.id === id)?.name}` : "New orders now default to no station") : r.error);
     router.refresh();
   };
-  const [details, setDetails] = useState({ name: merchant.name, phone: merchant.phone, email: merchant.email, pickup_address: merchant.pickup_address });
+  const [details, setDetails] = useState({
+    name: merchant.name,
+    phone: merchant.phone,
+    email: merchant.email,
+    pickup_address: merchant.pickup_address,
+    bank_name: merchant.bank_name ?? "",
+    account_number: merchant.account_number ?? "",
+    account_name: merchant.account_name ?? "",
+  });
   const [q, setQ] = useState("");
   const [newArea, setNewArea] = useState("");
   const [newFee, setNewFee] = useState("");
@@ -201,6 +209,32 @@ export function MerchantSettings({
                     </p>
                   </div>
                 )}
+              </div>
+              <h3 style={{ margin: "20px 0 4px" }}>Bank details for remittances</h3>
+              <p className="small muted" style={{ marginBottom: 12 }}>
+                Shown on the Remittance page next to Mark as paid, so whoever pays can copy them.
+              </p>
+              <div className="grid2">
+                <div className="field">
+                  <label htmlFor="mBank">Bank</label>
+                  <input className="input" id="mBank" placeholder="e.g. GTBank" value={details.bank_name} onChange={(e) => setDetails({ ...details, bank_name: e.target.value })} />
+                </div>
+                <div className="field">
+                  <label htmlFor="mAcct">Account number</label>
+                  <input
+                    className="input"
+                    id="mAcct"
+                    inputMode="numeric"
+                    maxLength={14}
+                    placeholder="10 digits"
+                    value={details.account_number}
+                    onChange={(e) => setDetails({ ...details, account_number: e.target.value })}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="mAcctName">Account name</label>
+                  <input className="input" id="mAcctName" value={details.account_name} onChange={(e) => setDetails({ ...details, account_name: e.target.value })} />
+                </div>
               </div>
               <div className="formfoot">
                 <button className="btn primary" type="button" onClick={saveDetails}>

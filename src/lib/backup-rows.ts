@@ -129,7 +129,10 @@ export function buildTabs(d: BackupData, now: Date = new Date()): Tab[] {
 
   const merchants: Tab = {
     name: "Merchants",
-    rows: [["Merchant", "Phone", "Email", "Pickup address", "Default station"], ...byId(d.merchants, "name").map((m) => [s(m.name), s(m.phone), s(m.email), s(m.pickup_address), station(m.default_station_id)])],
+    rows: [
+      ["Merchant", "Phone", "Email", "Pickup address", "Default station", "Bank", "Account number", "Account name"],
+      ...byId(d.merchants, "name").map((m) => [s(m.name), s(m.phone), s(m.email), s(m.pickup_address), station(m.default_station_id), s(m.bank_name), s(m.account_number), s(m.account_name)]),
+    ],
   };
 
   const stockAt = new Map(d.stationStock.map((x) => [`${s(x.product_id)}|${s(x.station_id)}`, n(x.qty)]));

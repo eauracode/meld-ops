@@ -33,14 +33,27 @@ export async function addMerchant(name: string, pickup: string): Promise<Result>
   return { ok: true };
 }
 
-export async function saveMerchant(id: string, v: { name: string; phone: string; email: string; pickup_address: string }): Promise<Result> {
+export async function saveMerchant(
+  id: string,
+  v: { name: string; phone: string; email: string; pickup_address: string; bank_name: string; account_number: string; account_name: string },
+): Promise<Result> {
   const s = await actionSession({ admin: true });
   if (!v.name.trim()) return { ok: false, error: "Business name can’t be empty." };
   const phone = v.phone.trim() ? normalisePhone(v.phone) : "";
   if (phone && !isValidPhone(phone)) return { ok: false, error: "Use an 11-digit WhatsApp number starting 070, 080, 081, 090 or 091." };
+  const account = v.account_number.replace(/\D/g, "");
+  if (account && account.length !== 10) return { ok: false, error: "Account numbers in Nigeria have 10 digits." };
   const { error } = await s.supabase
     .from("merchants")
-    .update({ name: v.name.trim(), phone, email: v.email.trim(), pickup_address: v.pickup_address.trim() })
+    .update({
+      name: v.name.trim(),
+      phone,
+      email: v.email.trim(),
+      pickup_address: v.pickup_address.trim(),
+      bank_name: v.bank_name.trim().slice(0, 80),
+      account_number: account,
+      account_name: v.account_name.trim().slice(0, 120),
+    })
     .eq("id", id);
   revalidatePath("/", "layout");
   return fail(error);

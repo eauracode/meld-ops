@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
@@ -167,7 +168,8 @@ export function RemitEditor({
       title: "Mark remittance as paid?",
       body: (
         <>
-          Confirm you have paid <b>{naira(s.expected)}</b> to {merchant.name} for {dmy(remit.remit_date)}. The remittance locks after this.
+          Confirm you have paid <b>{naira(s.expected)}</b> to {merchant.name} for {dmy(remit.remit_date)}
+          {merchant.account_number ? ` (${[merchant.bank_name, merchant.account_number].filter(Boolean).join(" ")})` : ""}. The remittance locks after this.
         </>
       ),
       ok: "Mark as paid",
@@ -437,6 +439,7 @@ export function RemitEditor({
           <p className="small muted" style={{ marginTop: 8 }}>
             WhatsApp and email send the summary to {merchant.name}. Attach the PDF if they want every line.
           </p>
+          <PayTo merchant={merchant} amount={s.expected} />
           <div className="statusbar">
             <span className={`pill ${statusCls}`}>{statusLabel}</span>
             {remit.status === "draft" && (
@@ -454,6 +457,45 @@ export function RemitEditor({
           </div>
         </div>
       </aside>
+    </div>
+  );
+}
+
+/** The merchant's bank details, ready to copy into a bank app when paying the remittance. */
+function PayTo({ merchant, amount }: { merchant: Merchant; amount: number }) {
+  const { toast } = useFeedback();
+  const copy = async (text: string, what: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(`${what} copied`);
+    } catch {
+      toast(`Couldn’t copy. ${what}: ${text}`);
+    }
+  };
+
+  if (!merchant.account_number) {
+    return (
+      <p className="small muted payto">
+        No bank details for {merchant.name} yet. <Link href="/merchants">Add them in Merchant settings</Link>.
+      </p>
+    );
+  }
+  const all = [merchant.account_name, merchant.account_number, merchant.bank_name].filter(Boolean).join("\n");
+  return (
+    <div className="payto" aria-label="Pay to">
+      <span className="small muted">Pay to</span>
+      <div className="payto-acct">
+        <b>{merchant.account_number}</b>
+        <button className="btn sm" type="button" onClick={() => copy(merchant.account_number, "Account number")}>
+          Copy
+        </button>
+      </div>
+      <div className="small">
+        {[merchant.account_name, merchant.bank_name].filter(Boolean).join(" · ")}
+      </div>
+      <button className="btn sm" type="button" style={{ marginTop: 6 }} onClick={() => copy(`${all}\n${naira(amount)}`, "Bank details and amount")}>
+        Copy all with amount
+      </button>
     </div>
   );
 }

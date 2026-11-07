@@ -17,6 +17,10 @@ export type Merchant = {
   phone: string;
   email: string;
   pickup_address: string;
+  /** Where remittances are paid (migration 007). */
+  bank_name: string;
+  account_number: string;
+  account_name: string;
 };
 
 export type Product = { id: string; merchant_id: string; name: string; price: number; stock: number };

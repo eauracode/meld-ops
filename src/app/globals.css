@@ -235,6 +235,8 @@ kbd { font: inherit; font-size: 0.78rem; padding: 1px 6px; border: 1px solid var
 .sumrows .sub { padding-left: 14px; font-size: 0.88rem; color: var(--muted); border-bottom: 0; padding-top: 2px; padding-bottom: 2px; }
 .sendrow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 14px; }
 .sendrow .btn { padding: 0 8px; font-size: 0.92rem; }
+.payto { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface-2); }
+.payto-acct { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 1.15rem; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 .statusbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 0.9rem; }
 .typesel { min-width: 120px; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--r-sm); border: 1px solid transparent; background: none; cursor: pointer; color: var(--muted); }

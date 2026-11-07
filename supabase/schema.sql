@@ -38,6 +38,10 @@ create table public.merchants (
   phone text not null default '',
   email text not null default '',
   pickup_address text not null default '',
+  -- Where remittances are paid.
+  bank_name text not null default '',
+  account_number text not null default '',
+  account_name text not null default '',
   created_at timestamptz not null default now()
 );
 
