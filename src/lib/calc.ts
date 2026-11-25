@@ -230,9 +230,13 @@ export type DashTally = {
   failed: number;
   orderValue: number;
   charged: number;
-  /** Partner rider pay owed (in-house riders count 0). */
+  /** Partner rider pay owed, delivered and failed trips (in-house riders count 0). */
   riderFees: number;
+  /** Meld's margin: delivered charges + failed fees − rider pay. */
   revenue: number;
+  /** Failed or returned: what merchants pay (half the charge) and what the trip cost in rider pay. */
+  failedFees: number;
+  failedCost: number;
   /** Delivered by in-house riders, and what those deliveries were charged. */
   inhouse: number;
   inhouseCharged: number;
@@ -252,7 +256,19 @@ export type DashStats = DashTally & {
 };
 
 const isFailed = (s: string) => s === "Failed" || s === "Returned";
-const blankTally = (): DashTally => ({ orders: 0, delivered: 0, failed: 0, orderValue: 0, charged: 0, riderFees: 0, revenue: 0, inhouse: 0, inhouseCharged: 0 });
+const blankTally = (): DashTally => ({
+  orders: 0,
+  delivered: 0,
+  failed: 0,
+  orderValue: 0,
+  charged: 0,
+  riderFees: 0,
+  revenue: 0,
+  failedFees: 0,
+  failedCost: 0,
+  inhouse: 0,
+  inhouseCharged: 0,
+});
 
 /** Every bucket key from `from` to `to`: each day, or each month (YYYY-MM). */
 export function trendKeys(from: string, to: string, grain: Grain): string[] {
@@ -263,8 +279,9 @@ export function trendKeys(from: string, to: string, grain: Grain): string[] {
 }
 
 /**
- * Overview figures for a set of orders. Money (order value, charges, revenue) counts Delivered only;
- * cash collected is Delivered and cash on delivery. Revenue = amount charged − rider pay owed (riderCost).
+ * Overview figures for a set of orders. Order value and charges count Delivered only; cash collected is
+ * Delivered and cash on delivery. Revenue = amount charged − rider pay for delivered orders, plus the
+ * failed fee (half the charge) − rider pay for failed or returned ones.
  */
 export function dashboardStats(orders: DashOrder[], from: string, to: string, grain: Grain): DashStats {
   const s: DashStats = { ...blankTally(), open: 0, cashCollected: 0, successRate: null, byStatus: {}, byMerchant: {}, byRider: {}, byArea: [], trend: [] };
@@ -280,7 +297,15 @@ export function dashboardStats(orders: DashOrder[], from: string, to: string, gr
 
     for (const t of [s, (s.byMerchant[o.merchant_id] ??= blankTally()), (s.byRider[o.rider_id ?? ""] ??= blankTally())]) {
       t.orders += 1;
-      if (failed) t.failed += 1;
+      if (failed) {
+        const fee = Math.round(toNum(o.amount_charged) * FAILED_FEE_SHARE);
+        const cost = riderCost(o);
+        t.failed += 1;
+        t.failedFees += fee;
+        t.failedCost += cost;
+        t.riderFees += cost;
+        t.revenue += fee - cost;
+      }
       if (delivered) {
         t.delivered += 1;
         t.orderValue += toNum(o.order_value);

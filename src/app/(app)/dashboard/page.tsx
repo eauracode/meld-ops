@@ -201,6 +201,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <span>Failed or returned</span>
           <b>{s.failed.toLocaleString("en-NG")}</b>
           <Delta now={s.failed} before={p.failed} period={period} upIsBad />
+          {s.failed > 0 && (
+            <span className="delta">
+              Cost {naira(s.failedCost)} in rider pay; merchants paid {naira(s.failedFees)}
+            </span>
+          )}
         </div>
         <div className="kpi">
           <span>Still open</span>
@@ -215,7 +220,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="kpi">
           <span>Partner rider fees</span>
           <b>{naira(s.riderFees)}</b>
-          <span className="delta">Charged to merchants {naira(s.charged)}</span>
+          <span className="delta">
+            Charged to merchants {naira(s.charged)}
+            {s.failedCost > 0 && ` · includes ${naira(s.failedCost)} for failed trips`}
+          </span>
         </div>
 
         <div className="kpi">

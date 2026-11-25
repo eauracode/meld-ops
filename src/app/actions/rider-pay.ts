@@ -39,7 +39,7 @@ export async function setRiderFee(orderId: number, fee: number | string): Promis
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
-/** Marks every unpaid delivered order for this rider between the dates as paid, as one payout. */
+/** Marks every unpaid trip (delivered, failed or returned) for this rider between the dates as paid, as one payout. */
 export async function payRider(riderId: string, from: string, to: string): Promise<{ ok: true; amount: number; orders: number } | { ok: false; error: string }> {
   const s = await actionSession({ admin: true });
   if (!isDate(from) || !isDate(to)) return { ok: false, error: "Pick the dates." };
@@ -48,7 +48,7 @@ export async function payRider(riderId: string, from: string, to: string): Promi
     .from("orders")
     .select("id,rider_fee")
     .eq("rider_id", riderId)
-    .eq("status", "Delivered")
+    .in("status", ["Delivered", "Failed", "Returned"]) // failed trips are paid too
     .eq("inhouse", false) // in-house riders are salaried, never paid per delivery
     .is("rider_payout_id", null)
     .gte("delivery_date", from)

@@ -19,7 +19,11 @@ type Row = {
   rider_id: string;
   rider_fee: number;
   rider_payout_id: string | null;
+  status: string;
 };
+
+/** Every trip a partner rider is paid for: delivered, and failed or returned (the rider still went). */
+const PAID_TRIPS = ["Delivered", "Failed", "Returned"];
 
 export default async function RiderPayPage({ searchParams }: { searchParams: Promise<Search> }) {
   const { supabase, merchants } = await requireAdmin();
@@ -41,8 +45,8 @@ export default async function RiderPayPage({ searchParams }: { searchParams: Pro
       fetchAll<Row>((a, b) =>
         supabase
           .from("orders")
-          .select("id,delivery_date,merchant_id,customer,area,address,rider_id,rider_fee,rider_payout_id")
-          .eq("status", "Delivered")
+          .select("id,delivery_date,merchant_id,customer,area,address,rider_id,rider_fee,rider_payout_id,status")
+          .in("status", PAID_TRIPS)
           .eq("inhouse", false) // in-house riders are salaried
           .not("rider_id", "is", null)
           .gte("delivery_date", from)
@@ -102,6 +106,7 @@ export default async function RiderPayPage({ searchParams }: { searchParams: Pro
       area: o.area || o.address,
       rider: riderName(o.rider_id),
       fee: o.rider_fee,
+      status: o.status,
       paid: Boolean(o.rider_payout_id),
       paidAt: o.rider_payout_id ? (paidOn.get(o.rider_payout_id) ?? null) : null,
     }));

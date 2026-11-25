@@ -141,7 +141,11 @@ describe("overview dashboard", () => {
     expect(s.successRate).toBe(0.5);
     expect(s.orderValue).toBe(30000);
     expect(s.cashCollected).toBe(10000); // the prepaid order isn't cash collected
-    expect(s.revenue).toBe(2000 + 1500);
+    // delivered margins 2,000 + 1,500; each failed trip: half of 4,500 charged (2,250) − 2,500 rider pay
+    expect(s.revenue).toBe(2000 + 1500 - 250 - 250);
+    expect(s.failedFees).toBe(4500);
+    expect(s.failedCost).toBe(5000);
+    expect(s.riderFees).toBe(2500 + 3500 + 5000);
     expect(s.byRider.r1).toMatchObject({ orders: 3, delivered: 2, failed: 1 });
     expect(s.byRider[""]).toMatchObject({ orders: 1, delivered: 0 });
     expect(s.trend).toEqual([

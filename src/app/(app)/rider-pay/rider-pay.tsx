@@ -17,6 +17,7 @@ export type PayRow = {
   area: string;
   rider: string;
   fee: number;
+  status: string;
   paid: boolean;
   paidAt: string | null;
 };
@@ -91,7 +92,7 @@ export function RiderPay({
       <div className="pagehead">
         <div>
           <h1>Rider pay</h1>
-          <p>What each rider is owed for delivered orders, {range}. Edit pay on unpaid orders; mark a rider paid to lock it. In-house riders are salaried and not listed.</p>
+          <p>What each rider is owed for delivered, failed and returned trips, {range}. Edit pay on unpaid orders (for a failed trip, enter what it actually cost); mark a rider paid to lock it. In-house riders are salaried and not listed.</p>
         </div>
       </div>
 
@@ -160,7 +161,7 @@ export function RiderPay({
               <thead>
                 <tr>
                   <th>Rider</th>
-                  <th className="num">Deliveries</th>
+                  <th className="num">Trips</th>
                   <th className="num">Pay</th>
                   <th className="num">Paid</th>
                   <th className="num">Owed</th>
@@ -177,7 +178,7 @@ export function RiderPay({
                         {t.name}
                       </Link>
                     </td>
-                    <td data-l="Deliveries" className="num">
+                    <td data-l="Trips" className="num">
                       {t.deliveries}
                     </td>
                     <td data-l="Pay" className="num">
@@ -206,7 +207,7 @@ export function RiderPay({
         ) : (
           <div className="empty">
             <h3>No deliveries</h3>
-            <p>No delivered orders with a rider, {range}.</p>
+            <p>No delivered, failed or returned orders with a partner rider, {range}.</p>
           </div>
         )}
       </section>
@@ -238,6 +239,12 @@ export function RiderPay({
                     <td data-l="Merchant">{o.merchant}</td>
                     <td className="first" data-l="Customer">
                       {o.customer}
+                      {o.status !== "Delivered" && (
+                        <>
+                          {" "}
+                          <span className={`pill st-${o.status}`}>{o.status}</span>
+                        </>
+                      )}
                     </td>
                     <td data-l="Area" className="small">
                       {o.area}
