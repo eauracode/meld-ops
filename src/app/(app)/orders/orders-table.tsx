@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { STATUSES, dmy, lagosToday, naira, toNum } from "@/lib/calc";
+import { STATUSES, dmy, isFailed, lagosToday, merchantCharge, naira, toNum } from "@/lib/calc";
 import { orderCode, riderLabel, type Order, type Rider } from "@/lib/types";
 import { useFeedback } from "@/components/feedback";
 import { changeDeliveryDate, updateOrder, updateQuantity } from "@/app/actions/orders";
@@ -188,7 +188,12 @@ export function OrdersTable({
                   {naira(o.order_value)}
                 </td>
                 <td data-l="Charged" className="num">
-                  {naira(o.amount_charged)}
+                  {naira(merchantCharge(o))}
+                  {isFailed(o.status) && (
+                    <span className="small muted" style={{ display: "block" }} title={`Half of ${naira(o.amount_charged)}`}>
+                      failed fee (50%)
+                    </span>
+                  )}
                 </td>
                 <td data-l="Rider">
                   <select className="input" aria-label={`Rider for ${code}`} value={o.rider_id ?? ""} onChange={(e) => change(o, { rider_id: e.target.value || null })}>

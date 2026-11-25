@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { charged, toNum } from "@/lib/calc";
+import { charged, lagosToday, toNum } from "@/lib/calc";
 import { actionSession } from "@/lib/session";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -75,6 +75,54 @@ export async function payRider(riderId: string, from: string, to: string): Promi
   }
   refresh();
   return { ok: true, amount, orders: rows.length };
+}
+
+/**
+ * Marks one trip paid as its own payout, on the day the rider was actually paid (Lagos date), so a
+ * past payment shows in the records with its real date.
+ */
+export async function payOrder(orderId: number, paidOn: string): Promise<{ ok: true; amount: number } | { ok: false; error: string }> {
+  const s = await actionSession({ admin: true });
+  if (!isDate(paidOn)) return { ok: false, error: "Pick the date the rider was paid." };
+  if (paidOn > lagosToday()) return { ok: false, error: "The payment date can’t be in the future." };
+
+  const { data: o, error: oErr } = await s.supabase
+    .from("orders")
+    .select("id,rider_id,rider_fee,status,inhouse,rider_payout_id,delivery_date")
+    .eq("id", orderId)
+    .single();
+  if (oErr || !o) return { ok: false, error: oErr?.message ?? "Order not found." };
+  if (!o.rider_id) return { ok: false, error: "Assign the rider first." };
+  if (o.inhouse) return { ok: false, error: "In-house riders are salaried; there’s no per-delivery pay to record." };
+  if (!["Delivered", "Failed", "Returned"].includes(o.status)) return { ok: false, error: "Only delivered, failed or returned trips are paid." };
+  if (o.rider_payout_id) return { ok: false, error: "This trip is already marked paid." };
+
+  const { data: payout, error: pErr } = await s.supabase
+    .from("rider_payouts")
+    .insert({
+      rider_id: o.rider_id,
+      amount: o.rider_fee,
+      orders: 1,
+      period_from: o.delivery_date,
+      period_to: o.delivery_date,
+      paid_at: `${paidOn}T12:00:00+01:00`,
+    })
+    .select("id")
+    .single();
+  if (pErr || !payout) return { ok: false, error: pErr?.message ?? "Couldn’t record the payment." };
+
+  const { data: done, error } = await s.supabase
+    .from("orders")
+    .update({ rider_payout_id: payout.id })
+    .eq("id", orderId)
+    .is("rider_payout_id", null)
+    .select("id");
+  if (error || !done?.length) {
+    await s.supabase.from("rider_payouts").delete().eq("id", payout.id);
+    return { ok: false, error: error?.message ?? "This trip is already marked paid." };
+  }
+  refresh();
+  return { ok: true, amount: o.rider_fee };
 }
 
 /** Removes a payment; its orders go back to unpaid. */

@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFeedback } from "@/components/feedback";
-import { dmy, naira, toNum } from "@/lib/calc";
-import { payRider, setRiderFee, undoPayout } from "@/app/actions/rider-pay";
+import { dmy, lagosToday, naira, toNum } from "@/lib/calc";
+import { payOrder, payRider, setRiderFee, undoPayout } from "@/app/actions/rider-pay";
 import { riderLabel, type Rider } from "@/lib/types";
 
 export type RiderTotal = { riderId: string; name: string; deliveries: number; total: number; paid: number; unpaid: number };
@@ -67,6 +67,31 @@ export function RiderPay({
     if (!ok) return;
     const r = await payRider(t.riderId, f.from, f.to);
     toast(r.ok ? `${t.name}: ${naira(r.amount)} for ${r.orders} deliver${r.orders === 1 ? "y" : "ies"} marked paid` : r.error);
+    router.refresh();
+  };
+
+  const paidOn = useRef(lagosToday());
+  const payOne = async (o: PayRow) => {
+    paidOn.current = lagosToday();
+    const ok = await confirm({
+      title: `Mark this trip paid?`,
+      body: (
+        <>
+          <p>
+            {naira(o.fee)} to {o.rider} for {o.customer} ({dmy(o.date)}
+            {o.status !== "Delivered" ? `, ${o.status.toLowerCase()}` : ""}). Only this order is marked paid.
+          </p>
+          <label className="field">
+            <span>Date the rider was paid</span>
+            <input className="input" type="date" defaultValue={paidOn.current} max={lagosToday()} onChange={(e) => (paidOn.current = e.target.value)} />
+          </label>
+        </>
+      ),
+      ok: `Mark ${naira(o.fee)} paid`,
+    });
+    if (!ok) return;
+    const r = await payOrder(o.id, paidOn.current);
+    toast(r.ok ? `${o.customer}: ${naira(r.amount)} to ${o.rider} marked paid on ${dmy(paidOn.current)}` : r.error);
     router.refresh();
   };
 
@@ -256,7 +281,12 @@ export function RiderPay({
                       {o.paid ? (
                         <span className="pill st-Delivered">{o.paidAt ? `Paid ${paidDate(o.paidAt)}` : "Paid"}</span>
                       ) : (
-                        <span className="pill st-Pending">Unpaid</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span className="pill st-Pending">Unpaid</span>
+                          <button className="btn sm" type="button" onClick={() => payOne(o)} aria-label={`Mark ${o.customer} paid`}>
+                            Mark paid
+                          </button>
+                        </span>
                       )}
                     </td>
                   </tr>

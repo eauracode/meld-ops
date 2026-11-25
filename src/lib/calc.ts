@@ -25,6 +25,17 @@ export type LineType = (typeof LINE_TYPES)[number];
 /** Share of the amount charged that a failed or returned delivery costs the merchant. */
 export const FAILED_FEE_SHARE = 0.5;
 
+export const isFailed = (status: string) => status === "Failed" || status === "Returned";
+
+/**
+ * What the merchant actually pays Meld for an order: the full charge when delivered, half of it
+ * (FAILED_FEE_SHARE) when failed or returned. The order keeps the full charge in amount_charged.
+ */
+export function merchantCharge(o: { status: string; amount_charged: number }): number {
+  const full = toNum(o.amount_charged);
+  return isFailed(o.status) ? Math.round(full * FAILED_FEE_SHARE) : full;
+}
+
 /** Markup Meld adds to the rider fee: under ₦3,000 adds ₦2,000; under ₦5,000 adds ₦1,500; otherwise ₦1,000. */
 export function markup(riderFee: number): number {
   if (riderFee < 3000) return 2000;
@@ -255,7 +266,6 @@ export type DashStats = DashTally & {
   trend: { key: string; delivered: number; failed: number }[];
 };
 
-const isFailed = (s: string) => s === "Failed" || s === "Returned";
 const blankTally = (): DashTally => ({
   orders: 0,
   delivered: 0,
@@ -298,7 +308,7 @@ export function dashboardStats(orders: DashOrder[], from: string, to: string, gr
     for (const t of [s, (s.byMerchant[o.merchant_id] ??= blankTally()), (s.byRider[o.rider_id ?? ""] ??= blankTally())]) {
       t.orders += 1;
       if (failed) {
-        const fee = Math.round(toNum(o.amount_charged) * FAILED_FEE_SHARE);
+        const fee = merchantCharge(o);
         const cost = riderCost(o);
         t.failed += 1;
         t.failedFees += fee;

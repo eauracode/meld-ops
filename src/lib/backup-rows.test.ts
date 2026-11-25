@@ -87,6 +87,20 @@ describe("backup tabs", () => {
     expect(col("Rider type")).toBe("In-house");
   });
 
+  it("records a failed trip at half the charge, with its full rider cost and payment date", () => {
+    const t = buildTabs({
+      ...data,
+      riderPayouts: [{ id: "p9", rider_id: "r1", amount: 8000, orders: 1, period_from: "2026-11-12", period_to: "2026-11-12", paid_at: "2026-11-12T11:00:00Z" }],
+      orders: [{ ...data.orders[0], status: "Failed", rider_fee: 8000, rider_cost: 8000, amount_charged: 5500, rider_payout_id: "p9" }],
+    }).find((x) => x.name === "Orders")!;
+    const h = t.rows[0];
+    const col = (name: string) => t.rows[1][h.indexOf(name)];
+    expect(col("Amount charged")).toBe(2750);
+    expect(col("Rider pay owed")).toBe(8000);
+    expect(col("Revenue")).toBe(-5250);
+    expect(col("Rider paid")).toBe("12/11/2026");
+  });
+
   it("totals remittances with the remittance rules", () => {
     const row = tab("Remittances").rows[1];
     // received 23,500 − delivery 5,500 − failed 3,000 (50% of 6,000) − other 500

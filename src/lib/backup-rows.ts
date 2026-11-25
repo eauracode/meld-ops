@@ -1,6 +1,6 @@
 // Turns database rows into the backup sheet's tabs: one header row, then plain values, with names
 // in place of ids. Pure, so it is tested without a database or Google.
-import { dmy, remitSummary, riderCost, type LineType } from "./calc";
+import { dmy, merchantCharge, remitSummary, riderCost, type LineType } from "./calc";
 import { orderCode } from "./types";
 
 type Rec = Record<string, unknown>;
@@ -46,6 +46,9 @@ export function buildTabs(d: BackupData, now: Date = new Date()): Tab[] {
   const station = lookup(d.stations, (r) => s(r.name));
   const person = lookup(d.profiles, (r) => s(r.name) || s(r.email));
   const product = lookup(d.products, (r) => s(r.name));
+  const paidAt = lookup(d.riderPayouts, (r) => lagosTime(r.paid_at).slice(0, 10));
+  const cost = (o: Rec) => riderCost(o as { rider_fee: number; rider_cost?: number; inhouse?: boolean });
+  const billed = (o: Rec) => merchantCharge({ status: s(o.status), amount_charged: n(o.amount_charged) });
   const byId = <T extends Rec>(a: T[], k: string) => [...a].sort((x, y) => s(x[k]).localeCompare(s(y[k])));
 
   const orders: Tab = {
@@ -68,14 +71,15 @@ export function buildTabs(d: BackupData, now: Date = new Date()): Tab[] {
           n(o.qty),
           n(o.order_value),
           n(o.rider_fee),
-          n(o.amount_charged),
-          riderCost(o as { rider_fee: number; rider_cost?: number; inhouse?: boolean }),
-          n(o.amount_charged) - riderCost(o as { rider_fee: number; rider_cost?: number; inhouse?: boolean }),
+          // Failed or returned: the merchant pays half the charge, and the trip still costs rider pay.
+          billed(o),
+          cost(o),
+          billed(o) - cost(o),
           s(o.payment),
           s(o.status),
           rider(o.rider_id),
           o.rider_id ? (o.inhouse ? "In-house" : "Partner") : "",
-          o.rider_payout_id ? "Yes" : "",
+          o.rider_payout_id ? paidAt(o.rider_payout_id) || "Yes" : o.rider_id && o.inhouse ? "Salaried" : "",
           s(o.notes),
           lagosTime(o.created_at),
         ]),
