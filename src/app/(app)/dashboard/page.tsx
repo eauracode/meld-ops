@@ -210,7 +210,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div className="kpi">
           <span>Cash collected (COD)</span>
           <b>{naira(s.cashCollected)}</b>
-          <span className="delta">{naira(s.orderValue - s.cashCollected)} was already paid</span>
+          <span className="delta">{naira(s.orderValue - s.cashCollected)} prepaid by customers (no cash to collect)</span>
         </div>
         <div className="kpi">
           <span>Partner rider fees</span>

@@ -27,7 +27,8 @@ export const getSession = cache(async (): Promise<Session> => {
 
   const [{ data: profile }, { data: merchants }] = await Promise.all([
     supabase.from("profiles").select("id,name,email,title,role,all_merchants").eq("id", userId).single(),
-    supabase.from("merchants").select("id,name,phone,email,pickup_address,bank_name,account_number,account_name").order("name"),
+    // "*" so this still loads before migration 007 adds the bank columns.
+    supabase.from("merchants").select("*").order("name"),
   ]);
   if (!profile) redirect("/signin?error=no-profile");
 

@@ -86,13 +86,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               Earlier orders not yet delivered, failed or returned. Update the status or move them to today.
             </p>
           </div>
-          <OrdersTable orders={attention} riders={(riders ?? []) as Rider[]} merchantNames={merchantNames} attention />
+          <OrdersTable orders={attention} riders={(riders ?? []) as Rider[]} merchantNames={merchantNames} attention isAdmin={profile.role === "admin"} />
         </section>
       )}
       <OrderFilters filters={f} riders={(riders ?? []) as Rider[]} />
       <section className="panel">
         {list.length ? (
-          <OrdersTable orders={list} riders={(riders ?? []) as Rider[]} />
+          <OrdersTable orders={list} riders={(riders ?? []) as Rider[]} isAdmin={profile.role === "admin"} />
         ) : (
           <div className="empty">
             <h3>No orders match</h3>

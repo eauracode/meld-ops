@@ -43,18 +43,18 @@ export async function saveMerchant(
   if (phone && !isValidPhone(phone)) return { ok: false, error: "Use an 11-digit WhatsApp number starting 070, 080, 081, 090 or 091." };
   const account = v.account_number.replace(/\D/g, "");
   if (account && account.length !== 10) return { ok: false, error: "Account numbers in Nigeria have 10 digits." };
-  const { error } = await s.supabase
-    .from("merchants")
-    .update({
-      name: v.name.trim(),
-      phone,
-      email: v.email.trim(),
-      pickup_address: v.pickup_address.trim(),
-      bank_name: v.bank_name.trim().slice(0, 80),
-      account_number: account,
-      account_name: v.account_name.trim().slice(0, 120),
-    })
-    .eq("id", id);
+  const basics = { name: v.name.trim(), phone, email: v.email.trim(), pickup_address: v.pickup_address.trim() };
+  const bank = { bank_name: v.bank_name.trim().slice(0, 80), account_number: account, account_name: v.account_name.trim().slice(0, 120) };
+  let { error } = await s.supabase.from("merchants").update({ ...basics, ...bank }).eq("id", id);
+  if (error && /account_n|bank_name/.test(error.message)) {
+    // Bank columns not added yet (migration 007): save the rest and say so.
+    ({ error } = await s.supabase.from("merchants").update(basics).eq("id", id));
+    revalidatePath("/", "layout");
+    if (!error && (bank.bank_name || bank.account_number || bank.account_name)) {
+      return { ok: false, error: "Saved, except the bank details: run supabase/migrations/007_merchant_bank.sql in Supabase first." };
+    }
+    return fail(error);
+  }
   revalidatePath("/", "layout");
   return fail(error);
 }

@@ -5,24 +5,27 @@ import { useRef, useState } from "react";
 import { STATUSES, dmy, lagosToday, naira, toNum } from "@/lib/calc";
 import { orderCode, riderLabel, type Order, type Rider } from "@/lib/types";
 import { useFeedback } from "@/components/feedback";
-import { updateOrder, updateQuantity } from "@/app/actions/orders";
+import { changeDeliveryDate, updateOrder, updateQuantity } from "@/app/actions/orders";
 
 type Patch = { status?: string; rider_id?: string | null; delivery_date?: string };
 
 /**
  * On phones each row is a card, collapsed to the customer and status; tapping the name shows the rest.
  * `attention` adds "Move to today" (overdue orders); `merchantNames` shows the merchant on each order.
+ * Edit changes quantity and value; admins can also correct the delivery date there.
  */
 export function OrdersTable({
   orders,
   riders,
   merchantNames,
   attention,
+  isAdmin,
 }: {
   orders: Order[];
   riders: Rider[];
   merchantNames?: Record<string, string>;
   attention?: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const { toast } = useFeedback();
@@ -42,12 +45,12 @@ export function OrdersTable({
     });
   const active = riders.filter((r) => r.active);
 
-  // Quantity dialog: the value follows the quantity at the same unit price until it's typed over.
+  // Edit dialog: the value follows the quantity at the same unit price until it's typed over.
   const dlg = useRef<HTMLDialogElement>(null);
-  const [edit, setEdit] = useState<{ order: Order; qty: string; value: string; typed: boolean } | null>(null);
+  const [edit, setEdit] = useState<{ order: Order; qty: string; value: string; typed: boolean; date: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const openQty = (o: Order) => {
-    setEdit({ order: o, qty: String(o.qty), value: String(o.order_value), typed: false });
+    setEdit({ order: o, qty: String(o.qty), value: String(o.order_value), typed: false, date: o.delivery_date });
     dlg.current?.showModal();
   };
   const setQty = (qty: string) =>
@@ -60,20 +63,40 @@ export function OrdersTable({
   const saveQty = async () => {
     if (!edit) return;
     const o = edit.order;
-    setSaving(true);
-    const res = await updateQuantity(o.id, edit.qty, edit.value);
-    setSaving(false);
-    if (!res.ok) return toast(res.error ?? "Couldn’t save.");
-    dlg.current?.close();
     const q = Math.round(toNum(edit.qty));
-    setRows((rs) => rs.map((r) => (r.id === o.id ? { ...r, qty: q, order_value: Math.round(toNum(edit.value)) } : r)));
+    const v = Math.round(toNum(edit.value));
+    const qtyChanged = q !== o.qty || v !== o.order_value;
+    const dateChanged = isAdmin && edit.date !== o.delivery_date;
+    if (!qtyChanged && !dateChanged) return dlg.current?.close();
+    setSaving(true);
+    // The date first: it's the one that can be refused (order on a sent or paid remittance).
+    if (dateChanged) {
+      const res = await changeDeliveryDate(o.id, edit.date);
+      if (!res.ok) {
+        setSaving(false);
+        return toast(res.error ?? "Couldn’t change the date.");
+      }
+    }
+    if (qtyChanged) {
+      const res = await updateQuantity(o.id, edit.qty, edit.value);
+      if (!res.ok) {
+        setSaving(false);
+        router.refresh();
+        return toast(res.error ?? "Couldn’t save.");
+      }
+    }
+    setSaving(false);
+    dlg.current?.close();
+    setRows((rs) => rs.map((r) => (r.id === o.id ? { ...r, qty: q, order_value: v, delivery_date: dateChanged ? edit.date : r.delivery_date } : r)));
     router.refresh();
+    const said = [qtyChanged && `${o.product} × ${q}, ${naira(v)}`, dateChanged && `delivery date ${dmy(edit.date)}`].filter(Boolean).join("; ");
     toast(
       <>
-        {orderCode(o.id)} is now <b>{o.product} × {q}</b>, {naira(toNum(edit.value))}
+        {orderCode(o.id)}: <b>{said}</b>
       </>,
       async () => {
-        await updateQuantity(o.id, o.qty, o.order_value);
+        if (dateChanged) await changeDeliveryDate(o.id, o.delivery_date);
+        if (qtyChanged) await updateQuantity(o.id, o.qty, o.order_value);
         router.refresh();
       },
     );
@@ -156,7 +179,7 @@ export function OrdersTable({
                 <td data-l="Product">
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                     {o.product} × {o.qty}
-                    <button className="btn sm" type="button" onClick={() => openQty(o)} aria-label={`Change quantity for ${code}`}>
+                    <button className="btn sm" type="button" onClick={() => openQty(o)} aria-label={`Edit ${code}`}>
                       Edit
                     </button>
                   </span>
@@ -200,12 +223,21 @@ export function OrdersTable({
             }}
           >
             <div className="dlg-h">
-              <h2 id="qty-title">Change quantity: {orderCode(edit.order.id)}</h2>
+              <h2 id="qty-title">Edit {orderCode(edit.order.id)}</h2>
               <p className="small muted">
                 {edit.order.customer} · {edit.order.product} × {edit.order.qty}, {naira(edit.order.order_value)}
               </p>
             </div>
             <div className="dlg-b" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {isAdmin && (
+                <div className="field">
+                  <label htmlFor="qty-d">Delivery date</label>
+                  <input className="input" type="date" id="qty-d" value={edit.date} onChange={(e) => e.target.value && setEdit({ ...edit, date: e.target.value })} aria-describedby="qty-dh" />
+                  <p className="small muted" id="qty-dh">
+                    Fix a wrong date. The order moves to that day’s delivery report and remittance. Not possible once it’s on a sent or paid remittance.
+                  </p>
+                </div>
+              )}
               <div className="field">
                 <label htmlFor="qty-n">Quantity the customer took</label>
                 <input className="input" id="qty-n" inputMode="numeric" value={edit.qty} onChange={(e) => setQty(e.target.value)} autoFocus />

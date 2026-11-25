@@ -176,3 +176,33 @@ export async function updateQuantity(id: number, qty: number | string, orderValu
   revalidatePath("/merchants");
   return { ok: true };
 }
+
+/**
+ * Admin fix for a wrong delivery date. The order leaves its old day's draft remittance (the new day's
+ * draft picks it up when opened). Not allowed once the order is on a sent or paid remittance.
+ */
+export async function changeDeliveryDate(id: number, date: string): Promise<{ ok: boolean; error?: string }> {
+  const s = await actionSession({ admin: true });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { ok: false, error: "Pick a date." };
+
+  const admin = createAdminClient();
+  const { data: lines } = await admin.from("remittance_lines").select("id,remittances(status,remit_date)").eq("order_id", id);
+  const on = (lines ?? []).map((l) => ({ id: l.id as string, r: l.remittances as unknown as { status: string; remit_date: string } | null }));
+  const locked = on.find((l) => l.r && l.r.status !== "draft");
+  if (locked?.r) {
+    const d = locked.r.remit_date.split("-").reverse().join("/");
+    return { ok: false, error: `${orderCode(id)} is on the ${locked.r.status} remittance for ${d}, so its date can’t change.` };
+  }
+
+  const { data, error } = await s.supabase.from("orders").update({ delivery_date: date }).eq("id", id).select("id").maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!data) return { ok: false, error: "Order not found." };
+  if (on.length) await admin.from("remittance_lines").delete().in("id", on.map((l) => l.id));
+
+  revalidatePath("/orders");
+  revalidatePath("/report");
+  revalidatePath("/dashboard");
+  revalidatePath("/remittance");
+  revalidatePath("/rider-pay");
+  return { ok: true };
+}
